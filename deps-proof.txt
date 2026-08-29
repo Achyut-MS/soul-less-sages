@@ -1,32 +1,38 @@
-=== Zero-Dependency Dependency Proof ===
-Generated at: Sat Aug 29 09:09:37 UTC 2026
+﻿=== Zero-Dependency Dependency Proof ===
+Generated at: 2026-08-29 19:50:17
+
+Package Manifest Presence Audit:
+  package.json / Cargo.toml / go.mod / requirements.txt: absent or empty for this C project
 
 Files scanned:
-  - ./src-c/error_report.c
-  - ./src-c/error_report.h
-  - ./src-c/file_writer.c
-  - ./src-c/file_writer.h
-  - ./src-c/html_serializer.c
-  - ./src-c/html_serializer.h
-  - ./src-c/http.c
-  - ./src-c/http.h
-  - ./src-c/main.c
-  - ./src-c/md_parser.c
-  - ./src-c/md_parser.h
-  - ./src-c/mdview_single.c
-  - ./src-c/platform.c
-  - ./src-c/platform.h
-  - ./src-c/static/client.js
-  - ./src-c/static/index.html
-  - ./src-c/tokenizer.c
-  - ./src-c/tokenizer.h
-  - ./tests/commonmark/run_conformance.c
-  - ./tests/fuzz_roundtrip.c
-  - ./tests/test_file_writer.c
-  - ./tests/test_harness.h
-  - ./tests/test_html_serializer.c
-  - ./tests/test_md_parser.c
-  - ./tests/test_parser.c
-  - ./tests/test_platform.c
+  - .\launcher.c
+  - .\src-c\error_report.c
+  - .\src-c\error_report.h
+  - .\src-c\file_writer.c
+  - .\src-c\file_writer.h
+  - .\src-c\html_serializer.c
+  - .\src-c\html_serializer.h
+  - .\src-c\http.c
+  - .\src-c\http.h
+  - .\src-c\main.c
+  - .\src-c\md_parser.c
+  - .\src-c\md_parser.h
+  - .\src-c\mdview_single.c
+  - .\src-c\platform.c
+  - .\src-c\platform.h
+  - .\src-c\static\client.js
+  - .\src-c\static\index.html
+  - .\src-c\tokenizer.c
+  - .\src-c\tokenizer.h
+  - .\tests\commonmark\run_conformance.c
+  - .\tests\fuzz_roundtrip.c
+  - .\tests\test_file_writer.c
+  - .\tests\test_harness.h
+  - .\tests\test_html_serializer.c
+  - .\tests\test_http.c
+  - .\tests\test_md_parser.c
+  - .\tests\test_parser.c
+  - .\tests\test_platform.c
 
 Violation Audit:
+SUCCESS: 0 violations. Zero third-party runtime dependencies detected.

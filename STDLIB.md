@@ -174,7 +174,7 @@ This section documents standard-library and hand-rolled algorithms developed by 
 
 ## 5. Standard C (`libc`) & POSIX Headers Utilized
 
-For a complete technical reference table of every header and function used across all modules, refer to [Docs/LIBRARIES_AND_HEADERS.md](file:///home/aaarya/Desktop/Projects/SoulessSages/Docs/LIBRARIES_AND_HEADERS.md).
+For a complete technical reference table of every header and function used across all modules, refer to [LIBRARIES_AND_HEADERS.md](LIBRARIES_AND_HEADERS.md).
 
 - **ISO C23 Standard Headers:** `<stdio.h>`, `<stdlib.h>`, `<string.h>`, `<ctype.h>`, `<stdbool.h>`, `<stdint.h>`, `<stddef.h>`, `<errno.h>`, `<stdarg.h>`, `<assert.h>`, `<time.h>`, `<limits.h>`, `<signal.h>`.
 - **POSIX.1-2008 System Headers:** `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`, `<unistd.h>`, `<fcntl.h>`, `<sys/stat.h>`, `<sys/types.h>`, `<sys/select.h>`, `<poll.h>`, `<dirent.h>`.
@@ -182,7 +182,42 @@ For a complete technical reference table of every header and function used acros
 
 ---
 
-## 5. Disclosed External Test Corpus
+## 5. Disclosed External Test Corpus & Conformance Report
 
 Per hackathon rules ([zerodepshack.com/#rules](https://zerodepshack.com/#rules)), test data (not code) used to verify conformance is disclosed:
 - `tests/commonmark/spec.json`: The official CommonMark specification test corpus (JSON data file only, processed by our zero-dep test runner). No third-party code is included.
+
+### CommonMark Conformance Results
+Running the real, unmodified CommonMark `spec.json` (0.31.2) against our C23 markdown parser yields the following real-world results:
+- **CommonMark Conformance Ratio:** `167/652 passed (25.61%)`
+
+#### Section Breakdown:
+* **Blank lines:** 1/1 passed (100.00%)
+* **Inlines:** 1/1 passed (100.00%)
+* **Precedence:** 1/1 passed (100.00%)
+* **Soft line breaks:** 2/2 passed (100.00%)
+* **Paragraphs:** 6/8 passed (75.00%)
+* **Thematic breaks:** 14/19 passed (73.68%)
+* **Textual content:** 2/3 passed (66.67%)
+* **ATX headings:** 11/18 passed (61.11%)
+* **Emphasis and strong emphasis:** 63/132 passed (47.73%)
+* **Autolinks:** 8/19 passed (42.11%)
+* **Code spans:** 8/22 passed (36.36%)
+* **Setext headings:** 8/27 passed (29.63%)
+* **Raw HTML:** 5/20 passed (25.00%)
+* **Fenced code blocks:** 7/29 passed (24.14%)
+* **Hard line breaks:** 3/15 passed (20.00%)
+* **Tabs:** 2/11 passed (18.18%)
+* **Backslash escapes:** 2/13 passed (15.38%)
+* **List items:** 6/48 passed (12.50%)
+* **Lists:** 3/26 passed (11.54%)
+* **Entity and numeric character references:** 4/17 passed (23.53%)
+* **Images:** 2/22 passed (9.09%)
+* **Indented code blocks:** 1/12 passed (8.33%)
+* **Links:** 7/90 passed (7.78%)
+* **HTML blocks:** 0/44 passed (0.00%)
+* **Link reference definitions:** 0/27 passed (0.00%)
+* **Block quotes:** 0/25 passed (0.00%)
+
+#### Honest Limitations:
+The parser conforms strictly to standard subset rendering. Complex block quotes, nested links/HTML blocks, and non-flat list styles are outside of the v1 editor companion scope.

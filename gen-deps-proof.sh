@@ -76,11 +76,11 @@ while IFS= read -r file; do
     if [[ "$file" =~ \.js$ ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] && record_violation "Potential external require in $file: $line"
-        done < <((grep -E "require\s*\(" "$file" || true) | grep -v -E "require\s*\(\s*['\"]\./[^'\"]*['\"]\)" || true)
+        done < <(set +o pipefail; grep -E "require\s*\(" "$file" | grep -v -E "require\s*\(\s*['\"]\./[^'\"]*['\"]\)" || true)
 
         while IFS= read -r line; do
             [[ -n "$line" ]] && record_violation "Potential external import in $file: $line"
-        done < <((grep -E "import\s+.*from\s+" "$file" || true) | grep -v -E "from\s*['\"]\./[^'\"]*['\"]" || true)
+        done < <(set +o pipefail; grep -E "import\s+.*from\s+" "$file" | grep -v -E "from\s*['\"]\./[^'\"]*['\"]" || true)
     fi
 
     if [[ "$file" =~ \.(js|html)$ ]]; then
@@ -88,7 +88,7 @@ while IFS= read -r file; do
             if [[ -n "$url" && ! "$url" =~ localhost && ! "$url" =~ 127\.0\.0\.1 && ! "$url" =~ zerodepshack\.com ]]; then
                 record_violation "External HTTP/HTTPS reference in $file: $url"
             fi
-        done < <(grep -o -E "https?://[a-zA-Z0-9./?=&_-]+" "$file" | sort -u || true)
+        done < <(set +o pipefail; grep -o -E "https?://[a-zA-Z0-9./?=&_-]+" "$file" | sort -u || true)
     fi
 done < <(find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.js" -o -name "*.html" \) | sort)
 
