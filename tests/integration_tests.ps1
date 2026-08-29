@@ -97,7 +97,7 @@ try {
 # Test 6: POST /render (413 Request Entity Too Large)
 Write-Host -NoNewline "Test 6: POST /render (413 Payload Too Large) ... "
 try {
-    $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 70000" -d "" http://127.0.0.1:28080/render
+    $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 9000000" -d "" http://127.0.0.1:28080/render
     if ($resp -match "413 Request Entity Too Large") {
         Write-Host "PASSED" -ForegroundColor Green
     } else {

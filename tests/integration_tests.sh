@@ -82,7 +82,7 @@ fi
 
 # Test 6: POST /render (413 Request Entity Too Large)
 echo -n "Test 6: POST /render (413 Payload Too Large) ... "
-RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 70000" -d "" "$URL/render" 2>/dev/null || true)
+RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 9000000" -d "" "$URL/render" 2>/dev/null || true)
 if echo "$RESP" | grep -q "413 Request Entity Too Large"; then
     echo "PASSED"
 else
