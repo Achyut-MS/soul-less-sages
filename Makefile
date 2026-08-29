@@ -37,7 +37,7 @@ ifeq ($(OS),Windows_NT)
     RUN_INTEGRATION = powershell -ExecutionPolicy Bypass -File ./tests/integration_tests.ps1
     NO_BUILD_FLAG = -NoBuild
     define CLEAN_RECIPE
-	-$(RM) mdview.exe, mdview_single.exe, fuzz_roundtrip.exe, run_conformance.exe, test_parser.exe, test_html_serializer.exe, test_platform.exe, test_file_writer.exe
+	-$(RM) mdview.exe, mdview_single.exe, fuzz_roundtrip.exe, run_conformance.exe, parser_check.exe, html_serializer_check.exe, platform_check.exe, file_writer_check.exe, net_payload_check.exe
 	-$(RM) src-c/*.o, src-c/*.gcda, src-c/*.gcno
 	-$(RM) tests/*.gcda, tests/*.gcno
 	-$(RM) tests/commonmark/*.gcda, tests/commonmark/*.gcno
@@ -52,7 +52,7 @@ else
     RUN_INTEGRATION = bash ./tests/integration_tests.sh
     NO_BUILD_FLAG = --no-build
     define CLEAN_RECIPE
-	-$(RM) mdview mdview_single fuzz_roundtrip run_conformance test_parser test_html_serializer test_platform test_file_writer
+	-$(RM) mdview mdview_single fuzz_roundtrip run_conformance parser_check html_serializer_check platform_check file_writer_check net_payload_check
 	-$(RM) src-c/*.o src-c/*.gcda src-c/*.gcno
 	-$(RM) tests/*.gcda tests/*.gcno
 	-$(RM) tests/commonmark/*.gcda tests/commonmark/*.gcno
@@ -133,30 +133,34 @@ run_conformance$(EXE): tests/commonmark/run_conformance.c src-c/md_parser.c src-
 	$(CC) $(CFLAGS) tests/commonmark/run_conformance.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c -o run_conformance$(EXE) $(LDFLAGS)
 
 # Unit testing targets
-test: mdview$(EXE) test_parser$(EXE) test_html_serializer$(EXE) test_platform$(EXE) test_file_writer$(EXE)
+test: mdview$(EXE) parser_check$(EXE) html_serializer_check$(EXE) platform_check$(EXE) file_writer_check$(EXE) net_payload_check$(EXE)
 	@echo ===========================================
 	@echo Running Automated Unit Test Suites
 	@echo ===========================================
-	./test_parser$(EXE)
-	./test_html_serializer$(EXE)
-	./test_platform$(EXE)
-	./test_file_writer$(EXE)
+	./parser_check$(EXE)
+	./html_serializer_check$(EXE)
+	./platform_check$(EXE)
+	./file_writer_check$(EXE)
+	./net_payload_check$(EXE)
 	@echo ===========================================
 	@echo Running Integration Test Suite
 	@echo ===========================================
 	$(RUN_INTEGRATION) $(NO_BUILD_FLAG)
 
-test_parser$(EXE): tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c
-	$(CC) $(CFLAGS) tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c -o test_parser$(EXE) $(LDFLAGS)
+parser_check$(EXE): tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c
+	$(CC) $(CFLAGS) tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c -o parser_check$(EXE) $(LDFLAGS)
 
-test_html_serializer$(EXE): tests/test_html_serializer.c src-c/html_serializer.c
-	$(CC) $(CFLAGS) tests/test_html_serializer.c src-c/html_serializer.c -o test_html_serializer$(EXE) $(LDFLAGS)
+html_serializer_check$(EXE): tests/test_html_serializer.c src-c/html_serializer.c
+	$(CC) $(CFLAGS) tests/test_html_serializer.c src-c/html_serializer.c -o html_serializer_check$(EXE) $(LDFLAGS)
 
-test_platform$(EXE): tests/test_platform.c src-c/platform.c
-	$(CC) $(CFLAGS) tests/test_platform.c src-c/platform.c -o test_platform$(EXE) $(LDFLAGS) $(NET_LIBS)
+platform_check$(EXE): tests/test_platform.c src-c/platform.c
+	$(CC) $(CFLAGS) tests/test_platform.c src-c/platform.c -o platform_check$(EXE) $(LDFLAGS) $(NET_LIBS)
 
-test_file_writer$(EXE): tests/test_file_writer.c src-c/file_writer.c
-	$(CC) $(CFLAGS) -DTEST_MODE tests/test_file_writer.c src-c/file_writer.c -o test_file_writer$(EXE) $(LDFLAGS) $(NET_LIBS)
+file_writer_check$(EXE): tests/test_file_writer.c src-c/file_writer.c
+	$(CC) $(CFLAGS) -DTEST_MODE tests/test_file_writer.c src-c/file_writer.c -o file_writer_check$(EXE) $(LDFLAGS) $(NET_LIBS)
+
+net_payload_check$(EXE): tests/test_http.c src-c/http.c src-c/md_parser.c src-c/html_serializer.c src-c/file_writer.c src-c/platform.c src-c/tokenizer.c src-c/error_report.c
+	$(CC) $(CFLAGS) -DTEST_MODE tests/test_http.c src-c/http.c src-c/md_parser.c src-c/html_serializer.c src-c/file_writer.c src-c/platform.c src-c/tokenizer.c src-c/error_report.c -o net_payload_check$(EXE) $(LDFLAGS) $(NET_LIBS)
 
 # Cleanup
 clean:

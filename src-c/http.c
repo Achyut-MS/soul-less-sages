@@ -49,6 +49,18 @@ volatile sig_atomic_t g_keep_running = 1;
 platform_socket_t g_server_fd = PLATFORM_INVALID_SOCKET;
 static char g_initial_file[512] = {0};
 
+#define HTTP_HEADER_LIMIT 65536u
+#define HTTP_BODY_LIMIT (8u * 1024u * 1024u)
+#define HTTP_FILE_LIMIT (8u * 1024u * 1024u)
+
+static char *dup_cstr(const char *s) {
+    size_t len = strlen(s);
+    char *out = malloc(len + 1);
+    if (!out) return NULL;
+    memcpy(out, s, len + 1);
+    return out;
+}
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -158,6 +170,78 @@ static bool extract_json_string(const char *json, const char *key, char *out, si
     return false;
 }
 
+static bool append_char(char **buf, size_t *len, size_t *cap, char c) {
+    if (*len + 1 >= *cap) {
+        size_t new_cap = (*cap < 1024) ? 1024 : (*cap * 2);
+        char *new_buf = realloc(*buf, new_cap);
+        if (!new_buf) return false;
+        *buf = new_buf;
+        *cap = new_cap;
+    }
+    (*buf)[(*len)++] = c;
+    return true;
+}
+
+static char *extract_json_string_alloc(const char *json, const char *key) {
+    char key_pattern[64];
+    int written;
+    const char *p;
+    char *out = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+
+    if (!json || !key) return NULL;
+    written = snprintf(key_pattern, sizeof(key_pattern), "\"%s\"", key);
+    if (written < 0 || written >= (int)sizeof(key_pattern)) return NULL;
+
+    p = strstr(json, key_pattern);
+    if (!p) return NULL;
+    p += strlen(key_pattern);
+    while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) p++;
+    if (*p != ':') return NULL;
+    p++;
+    while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) p++;
+    if (*p != '"') return NULL;
+    p++;
+
+    while (*p) {
+        if (*p == '"') {
+            if (!append_char(&out, &len, &cap, '\0')) {
+                free(out);
+                return NULL;
+            }
+            return out;
+        }
+        if (*p == '\\') {
+            p++;
+            if (!*p) break;
+            switch (*p) {
+                case '"':  if (!append_char(&out, &len, &cap, '"')) goto fail; break;
+                case '\\': if (!append_char(&out, &len, &cap, '\\')) goto fail; break;
+                case '/':  if (!append_char(&out, &len, &cap, '/')) goto fail; break;
+                case 'b':  if (!append_char(&out, &len, &cap, '\b')) goto fail; break;
+                case 'f':  if (!append_char(&out, &len, &cap, '\f')) goto fail; break;
+                case 'n':  if (!append_char(&out, &len, &cap, '\n')) goto fail; break;
+                case 'r':  if (!append_char(&out, &len, &cap, '\r')) goto fail; break;
+                case 't':  if (!append_char(&out, &len, &cap, '\t')) goto fail; break;
+                case 'u':
+                    if (strlen(p) >= 5) p += 4;
+                    break;
+                default:
+                    if (!append_char(&out, &len, &cap, *p)) goto fail;
+                    break;
+            }
+        } else {
+            if (!append_char(&out, &len, &cap, *p)) goto fail;
+        }
+        p++;
+    }
+
+fail:
+    free(out);
+    return NULL;
+}
+
 /* Escapes a standard C string to be written safely inside a JSON double-quoted string */
 static void json_escape(const char *src, char *dest, size_t dest_max) {
     if (!src || !dest || dest_max == 0) {
@@ -201,6 +285,95 @@ static void json_escape(const char *src, char *dest, size_t dest_max) {
     }
     dest[j] = '\0';
 }
+
+static char *json_escape_alloc(const char *src) {
+    char *out = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+
+    if (!src) src = "";
+    for (size_t i = 0; src[i] != '\0'; i++) {
+        switch (src[i]) {
+            case '"':
+                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, '"')) goto fail;
+                break;
+            case '\\':
+                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, '\\')) goto fail;
+                break;
+            case '\n':
+                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 'n')) goto fail;
+                break;
+            case '\r':
+                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 'r')) goto fail;
+                break;
+            case '\t':
+                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 't')) goto fail;
+                break;
+            default:
+                if ((unsigned char)src[i] >= 32 && !append_char(&out, &len, &cap, src[i])) goto fail;
+                break;
+        }
+    }
+    if (!append_char(&out, &len, &cap, '\0')) goto fail;
+    return out;
+
+fail:
+    free(out);
+    return NULL;
+}
+
+static char *read_text_file_limit(const char *path, size_t limit, bool *too_large) {
+    FILE *f;
+    char *buf;
+    long size;
+    size_t n;
+
+    if (too_large) *too_large = false;
+    f = fopen(path, "rb");
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    size = ftell(f);
+    if (size < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if ((unsigned long)size > limit) {
+        if (too_large) *too_large = true;
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    buf = malloc((size_t)size + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    n = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    if (n != (size_t)size) {
+        free(buf);
+        return NULL;
+    }
+    buf[n] = '\0';
+    return buf;
+}
+
+#ifdef TEST_MODE
+char *http_test_extract_json_string_alloc(const char *json, const char *key) {
+    return extract_json_string_alloc(json, key);
+}
+
+char *http_test_json_escape_alloc(const char *src) {
+    return json_escape_alloc(src);
+}
+
+char *http_test_read_text_file_limit(const char *path, size_t limit, bool *too_large) {
+    return read_text_file_limit(path, limit, too_large);
+}
+#endif
 
 /* Helper to send complete HTTP response */
 static void send_response(platform_socket_t client_fd, int status_code, const char *status_text, const char *content_type, const char *content) {
@@ -520,30 +693,46 @@ static void handle_get_file(platform_socket_t client_fd, const char *path) {
         target = resolved;
     }
 
-    char *file_content = malloc(65536);
-    char *esc_content = malloc(65536);
-    char *esc_fname = malloc(1024);
-    char *resp_json = malloc(131072);
+    char *file_content = dup_cstr("");
+    char *esc_content = NULL;
+    char *esc_fname = NULL;
+    char *resp_json = NULL;
+    bool too_large = false;
 
-    if (!file_content || !esc_content || !esc_fname || !resp_json) {
+    if (!file_content) {
         send_error_response(client_fd, 500, "Internal Server Error");
-        free(file_content); free(esc_content); free(esc_fname); free(resp_json);
         return;
     }
-
-    file_content[0] = '\0';
     if (target && target[0] != '\0') {
-        FILE *f = fopen(target, "rb");
-        if (f) {
-            size_t read_bytes = fread(file_content, 1, 65535, f);
-            file_content[read_bytes] = '\0';
-            fclose(f);
+        char *loaded = read_text_file_limit(target, HTTP_FILE_LIMIT, &too_large);
+        if (too_large) {
+            free(file_content);
+            send_response(client_fd, 413, "Payload Too Large", "application/json",
+                "{\"error\":\"markdown file exceeds 8 MiB limit\"}");
+            return;
+        }
+        if (loaded) {
+            free(file_content);
+            file_content = loaded;
         }
     }
 
-    json_escape(file_content, esc_content, 65536);
-    json_escape(target ? target : "", esc_fname, 1024);
-    (void)snprintf(resp_json, 131072, "{\"content\":\"%s\",\"filename\":\"%s\"}", esc_content, esc_fname);
+    esc_content = json_escape_alloc(file_content);
+    esc_fname = json_escape_alloc(target ? target : "");
+    if (!esc_content || !esc_fname) {
+        send_error_response(client_fd, 500, "Internal Server Error");
+        free(file_content); free(esc_content); free(esc_fname);
+        return;
+    }
+
+    size_t resp_len = strlen(esc_content) + strlen(esc_fname) + 32;
+    resp_json = malloc(resp_len);
+    if (!resp_json) {
+        send_error_response(client_fd, 500, "Internal Server Error");
+        free(file_content); free(esc_content); free(esc_fname);
+        return;
+    }
+    (void)snprintf(resp_json, resp_len, "{\"content\":\"%s\",\"filename\":\"%s\"}", esc_content, esc_fname);
     send_response(client_fd, 200, "OK", "application/json", resp_json);
 
     free(file_content); free(esc_content); free(esc_fname); free(resp_json);
@@ -551,39 +740,55 @@ static void handle_get_file(platform_socket_t client_fd, const char *path) {
 
 /* Receives and routes a client connection */
 static void process_client(platform_socket_t client_fd) {
-    char *req_buf = malloc(65536);
+    size_t req_cap = 8192;
+    char *req_buf = malloc(req_cap);
     if (!req_buf) {
         send_error_response(client_fd, 500, "Internal Server Error");
         return;
     }
 
-    int total_read = 0;
-    int header_end_idx = -1;
+    size_t total_read = 0;
+    size_t header_end_idx = 0;
+    bool has_header_end = false;
 
     /* Read header bytes until we encounter the header-end sequence \r\n\r\n */
-    while (total_read < 65535) {
-        int n = recv_socket(client_fd, req_buf + total_read, 65535 - total_read, 0);
+    while (total_read < HTTP_HEADER_LIMIT) {
+        if (total_read + 4096 + 1 > req_cap) {
+            size_t new_cap = req_cap * 2;
+            char *new_buf;
+            if (new_cap > HTTP_HEADER_LIMIT + 1) new_cap = HTTP_HEADER_LIMIT + 1;
+            new_buf = realloc(req_buf, new_cap);
+            if (!new_buf) {
+                send_error_response(client_fd, 500, "Internal Server Error");
+                free(req_buf);
+                return;
+            }
+            req_buf = new_buf;
+            req_cap = new_cap;
+        }
+        int n = recv_socket(client_fd, req_buf + total_read, req_cap - total_read - 1, 0);
         if (n <= 0) {
             break;
         }
-        total_read += n;
+        total_read += (size_t)n;
         req_buf[total_read] = '\0';
 
         char *end = strstr(req_buf, "\r\n\r\n");
         if (end) {
-            header_end_idx = (int)(end - req_buf);
+            header_end_idx = (size_t)(end - req_buf);
+            has_header_end = true;
             break;
         }
     }
 
-    if (header_end_idx == -1) {
+    if (!has_header_end) {
         send_error_response(client_fd, 400, "Bad Request (Header Missing Delimiters)");
         free(req_buf);
         return;
     }
 
     /* Extract Content-Length to determine if a body payload must be fetched */
-    int content_len = 0;
+    size_t content_len = 0;
     char temp_char = req_buf[header_end_idx];
     req_buf[header_end_idx] = '\0'; /* Temporarily terminate headers to scan safely */
 
@@ -591,27 +796,43 @@ static void process_client(platform_socket_t client_fd) {
     if (!cl_ptr) cl_ptr = strstr(req_buf, "content-length:");
     if (!cl_ptr) cl_ptr = strstr(req_buf, "Content-length:");
     if (cl_ptr) {
+        char *endptr = NULL;
         cl_ptr += 15;
         while (*cl_ptr == ' ' || *cl_ptr == '\t') cl_ptr++;
-        content_len = atoi(cl_ptr);
+        content_len = (size_t)strtoull(cl_ptr, &endptr, 10);
+        if (endptr == cl_ptr) {
+            send_error_response(client_fd, 400, "Bad Request (Invalid Content-Length)");
+            free(req_buf);
+            return;
+        }
     }
     req_buf[header_end_idx] = temp_char; /* Restore original byte */
 
-    /* Ensure request body size fits within our allocated buffer limits */
-    if (header_end_idx + 4 + content_len > 65535) {
+    if (content_len > HTTP_BODY_LIMIT || header_end_idx + 4 + content_len + 1 < content_len) {
         send_error_response(client_fd, 413, "Request Entity Too Large");
         free(req_buf);
         return;
     }
 
+    size_t expected_total = header_end_idx + 4 + content_len;
+    if (expected_total + 1 > req_cap) {
+        char *new_buf = realloc(req_buf, expected_total + 1);
+        if (!new_buf) {
+            send_error_response(client_fd, 500, "Internal Server Error");
+            free(req_buf);
+            return;
+        }
+        req_buf = new_buf;
+        req_cap = expected_total + 1;
+    }
+
     /* Read remainder of request body bytes if they weren't read in the header scan */
-    int expected_total = header_end_idx + 4 + content_len;
     while (total_read < expected_total) {
         int n = recv_socket(client_fd, req_buf + total_read, expected_total - total_read, 0);
         if (n <= 0) {
             break;
         }
-        total_read += n;
+        total_read += (size_t)n;
     }
     req_buf[total_read] = '\0';
 
@@ -645,16 +866,9 @@ static void process_client(platform_socket_t client_fd) {
         }
     } else if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/render") == 0) {
-            char *md_buf = malloc(65536);
+            char *md_buf = extract_json_string_alloc(body, "md");
             if (!md_buf) {
-                send_error_response(client_fd, 500, "Internal Server Error");
-                free(req_buf);
-                return;
-            }
-
-            if (!extract_json_string(body, "md", md_buf, 65536)) {
                 send_response(client_fd, 400, "Bad Request", "application/json", "{\"error\":\"invalid or missing 'md' field in JSON\"}");
-                free(md_buf);
                 free(req_buf);
                 return;
             }
@@ -688,16 +902,9 @@ static void process_client(platform_socket_t client_fd) {
             md_parse_result_free(&res);
             free(md_buf);
         } else if (strcmp(path, "/serialize") == 0) {
-            char *html_buf = malloc(65536);
+            char *html_buf = extract_json_string_alloc(body, "html");
             if (!html_buf) {
-                send_error_response(client_fd, 500, "Internal Server Error");
-                free(req_buf);
-                return;
-            }
-
-            if (!extract_json_string(body, "html", html_buf, 65536)) {
                 send_response(client_fd, 400, "Bad Request", "application/json", "{\"error\":\"invalid or missing 'html' field in JSON\"}");
-                free(html_buf);
                 free(req_buf);
                 return;
             }
@@ -708,11 +915,11 @@ static void process_client(platform_socket_t client_fd) {
                     file_writer_schedule_save(g_initial_file, res.markdown, strlen(res.markdown));
                 }
 
-                char *esc_md = malloc(65536);
-                char *resp_json = malloc(65536);
+                char *esc_md = json_escape_alloc(res.markdown ? res.markdown : "");
+                size_t resp_len = esc_md ? strlen(esc_md) + 10 : 0;
+                char *resp_json = esc_md ? malloc(resp_len) : NULL;
                 if (esc_md && resp_json) {
-                    json_escape(res.markdown ? res.markdown : "", esc_md, 65536);
-                    (void)snprintf(resp_json, 65536, "{\"md\":\"%s\"}", esc_md);
+                    (void)snprintf(resp_json, resp_len, "{\"md\":\"%s\"}", esc_md);
                     send_response(client_fd, 200, "OK", "application/json", resp_json);
                 } else {
                     send_error_response(client_fd, 500, "Internal Server Error");
@@ -757,12 +964,12 @@ static void process_client(platform_socket_t client_fd) {
             return;
         } else if (strcmp(path, "/upload-file") == 0) {
             char up_name[256];
-            char *up_content = malloc(65536);
+            char *up_content = NULL;
             char *resp_json = malloc(1024);
 
-            if (!up_content || !resp_json) {
+            if (!resp_json) {
                 send_error_response(client_fd, 500, "Internal Server Error");
-                free(up_content); free(resp_json);
+                free(resp_json);
                 free(req_buf);
                 return;
             }
@@ -770,14 +977,15 @@ static void process_client(platform_socket_t client_fd) {
             if (!extract_json_string(body, "name", up_name, sizeof(up_name))) {
                 send_response(client_fd, 400, "Bad Request", "application/json",
                     "{\"error\":\"missing 'name' field\"}");
-                free(up_content); free(resp_json);
+                free(resp_json);
                 free(req_buf);
                 return;
             }
-            if (!extract_json_string(body, "content", up_content, 65536)) {
+            up_content = extract_json_string_alloc(body, "content");
+            if (!up_content) {
                 send_response(client_fd, 400, "Bad Request", "application/json",
-                    "{\"error\":\"missing or too large 'content' field (max ~64KB)\"}");
-                free(up_content); free(resp_json);
+                    "{\"error\":\"missing or invalid 'content' field\"}");
+                free(resp_json);
                 free(req_buf);
                 return;
             }
@@ -809,16 +1017,9 @@ static void process_client(platform_socket_t client_fd) {
             free(req_buf);
             return;
         } else if (strcmp(path, "/save") == 0) {
-            char *save_buf = malloc(65536);
+            char *save_buf = extract_json_string_alloc(body, "content");
             if (!save_buf) {
-                send_error_response(client_fd, 500, "Internal Server Error");
-                free(req_buf);
-                return;
-            }
-
-            if (!extract_json_string(body, "content", save_buf, 65536)) {
                 send_response(client_fd, 400, "Bad Request", "application/json", "{\"error\":\"invalid or missing 'content' field in JSON\"}");
-                free(save_buf);
                 free(req_buf);
                 return;
             }
