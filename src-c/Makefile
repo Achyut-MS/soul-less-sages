@@ -19,7 +19,7 @@ endif
 
 CFLAGS := -std=$(STD) -Wall -Wextra -Werror -O2
 TARGET := mdview$(EXE)
-SRCS := main.c md_parser.c tokenizer.c error_report.c http.c html_serializer.c file_writer.c platform.c
+SRCS := main.c md_parser.c tokenizer.c error_report.c http.c html_serializer.c file_writer.c platform.c logger.c
 OBJS := $(SRCS:.c=.o)
 
 .PHONY: all clean test single
