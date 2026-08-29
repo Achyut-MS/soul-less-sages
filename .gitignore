@@ -1,0 +1,24 @@
+# Build Artifacts and Executables
+*.exe
+*.o
+*.a
+*.so
+*.dylib
+*.out
+mdview
+mdview_single
+fuzz_roundtrip
+run_conformance
+test_parser
+test_html_serializer
+
+# Gcov / Lcov Code Coverage Products
+*.gcda
+*.gcno
+*.gcov
+
+# IDEs and OS Metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

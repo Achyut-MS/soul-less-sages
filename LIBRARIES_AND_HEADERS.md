@@ -59,6 +59,8 @@ To run as a native desktop application on both **Linux** and **Windows** with **
 | `<sys/types.h>` | POSIX.1-2008 | POSIX system data types | `ssize_t`, `off_t`, `mode_t`, `pid_t` | `http.c`, `file_writer.c` |
 | `<sys/select.h>` / `<poll.h>` | POSIX.1-2008 | Socket connection multiplexing & timeout loops | `select()`, `poll()`, `fd_set`, `struct pollfd` | `http.c` |
 | `<dirent.h>` | POSIX.1-2008 | Directory stream reading for test fixture files | `opendir()`, `readdir()`, `closedir()` | `tests/commonmark/run_conformance.c` |
+| `<pthread.h>` | POSIX.1-2008 | Multi-threading synchronization for debounced file writes | `pthread_create()`, `pthread_detach()`, `pthread_mutex_t`, `pthread_mutex_init()`, `pthread_mutex_lock()`, `pthread_mutex_unlock()` | `file_writer.c` |
+
 
 ### B. Windows System Headers (Win32 / MSVC / MinGW Built-in)
 | Windows Header | Standard SDK | Project Purpose | Functions & Structures Used | Module |

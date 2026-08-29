@@ -47,7 +47,7 @@ cd src-c; mingw32-make single; .\mdview_single.exe .\notes.md
 
 ## Language & Platform Decision
 
-**Decision: C (C23) with cross-platform Win32 & POSIX abstraction (`platform.h`), confirmed.** No C++, no Electron, and no third-party desktop wrappers. Sockets use POSIX `<sys/socket.h>` on Linux and Winsock2 `<winsock2.h>` on Windows. Atomic writes use `rename()`/`fsync()` on Linux and `MoveFileExA()`/`FlushFileBuffers()` on Windows. Desktop launch invokes `xdg-open` on Linux and `ShellExecuteA()` on Windows. Manual memory management and Valgrind/ASan-clean discipline are maintained across both platforms.
+**Decision: C (C23) with cross-platform Win32 & POSIX abstraction (`platform.h`), confirmed.** No C++, no Electron, and no third-party desktop wrappers. Sockets use POSIX `<sys/socket.h>` on Linux and Winsock2 `<winsock2.h>` on Windows. Atomic writes use `rename()`/`fsync()` on Linux and `MoveFileExA()`/`FlushFileBuffers()` on Windows. Desktop launch invokes `fork()` + `execvp("xdg-open", ...)` on Linux and `CreateProcessA()` on Windows with manual console fallback. Manual memory management and Valgrind/ASan-clean discipline are maintained across both platforms.
 
 | Criterion | C |
 |---|---|
@@ -104,8 +104,16 @@ cd src-c; mingw32-make single; .\mdview_single.exe .\notes.md
                     │  · md_to_html()    │  ← recursive-descent parser
                     │  · html_to_md()    │  ← DOM-tag walker
                     │  · atomic writer   │
-                    └───────────────────┘
 ```
+
+---
+
+## Concurrency Model
+
+Our desktop server runs a **single-threaded blocking accept loop** with **synchronous per-connection I/O**.
+*   **Listener Socket:** The listener socket is kept in blocking mode. When `platform_accept` is called, the execution path blocks until a new client connects.
+*   **Graceful Shutdown:** To exit cleanly, signal handlers on both Windows (`SetConsoleCtrlHandler`) and Linux (`sigaction` for `SIGINT`/`SIGTERM`) close the global listener socket. This forces the blocked `accept()` call to return immediately with an error, allowing the server to clean up resources, run `atexit()` handlers (writing gcov coverage `.gcda` files), and terminate gracefully.
+*   **Connection Processing:** Each client request is parsed, routed, and responded to synchronously within the main thread, closing the connection immediately via `Connection: close` (no keep-alive support).
 
 ---
 
