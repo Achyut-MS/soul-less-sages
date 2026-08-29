@@ -219,4 +219,4 @@ MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 
 ## License
 
-Hackathon submission — all code written during Aug 28–31 2026.
+MIT License — see [LICENSE](LICENSE) for details.
