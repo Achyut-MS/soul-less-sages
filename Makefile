@@ -123,14 +123,14 @@ fuzz: fuzz_roundtrip$(EXE)
 	@echo ===========================================
 	./fuzz_roundtrip$(EXE)
 
-fuzz_roundtrip$(EXE): tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c
-	$(CC) $(CFLAGS) -DFUZZ_DURATION_SECS=$(DURATION) tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c -o fuzz_roundtrip$(EXE) $(LDFLAGS)
+fuzz_roundtrip$(EXE): tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c src-c/tokenizer.c src-c/error_report.c
+	$(CC) $(CFLAGS) -DFUZZ_DURATION_SECS=$(DURATION) tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c src-c/tokenizer.c src-c/error_report.c -o fuzz_roundtrip$(EXE) $(LDFLAGS)
 
 # CommonMark target
 commonmark: run_conformance$(EXE)
 
-run_conformance$(EXE): tests/commonmark/run_conformance.c src-c/md_parser.c
-	$(CC) $(CFLAGS) tests/commonmark/run_conformance.c src-c/md_parser.c -o run_conformance$(EXE) $(LDFLAGS)
+run_conformance$(EXE): tests/commonmark/run_conformance.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c
+	$(CC) $(CFLAGS) tests/commonmark/run_conformance.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c -o run_conformance$(EXE) $(LDFLAGS)
 
 # Unit testing targets
 test: mdview$(EXE) test_parser$(EXE) test_html_serializer$(EXE) test_platform$(EXE) test_file_writer$(EXE)
@@ -146,8 +146,8 @@ test: mdview$(EXE) test_parser$(EXE) test_html_serializer$(EXE) test_platform$(E
 	@echo ===========================================
 	$(RUN_INTEGRATION) $(NO_BUILD_FLAG)
 
-test_parser$(EXE): tests/test_parser.c src-c/md_parser.c
-	$(CC) $(CFLAGS) tests/test_parser.c src-c/md_parser.c -o test_parser$(EXE) $(LDFLAGS)
+test_parser$(EXE): tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c
+	$(CC) $(CFLAGS) tests/test_parser.c src-c/md_parser.c src-c/tokenizer.c src-c/error_report.c -o test_parser$(EXE) $(LDFLAGS)
 
 test_html_serializer$(EXE): tests/test_html_serializer.c src-c/html_serializer.c
 	$(CC) $(CFLAGS) tests/test_html_serializer.c src-c/html_serializer.c -o test_html_serializer$(EXE) $(LDFLAGS)

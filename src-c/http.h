@@ -2,19 +2,17 @@
 #define HTTP_H
 
 #include <stdbool.h>
-#include <stddef.h>
 
-typedef struct {
-    int status;
-    char *content_type;
-    char *body;
-    size_t body_len;
-} http_response_t;
+/**
+ * @brief Starts and runs the raw HTTP/1.1 socket server loop.
+ *
+ * Implements raw socket binding, listening, client accept loop, HTTP request-line/header
+ * parsing, static file routing, and routing endpoints (/render, /serialize).
+ *
+ * @param port Port number to bind to (e.g. 8080).
+ * @param initial_file Optional path to the initial Markdown file loaded into the editor.
+ * @return true if the server ran and shut down gracefully, false on critical socket error.
+ */
+bool http_server_run(int port, const char *initial_file);
 
-http_response_t http_response_create(int status, const char *content_type, const char *body);
-void http_response_free(http_response_t *resp);
-char *http_parse_json_value(const char *json, const char *key);
-bool http_handle_render_request(const char *request_body, const char **out_html, char **out_error);
-bool http_handle_serialize_request(const char *request_body, const char **out_md, char **out_error);
-
-#endif
+#endif /* HTTP_H */

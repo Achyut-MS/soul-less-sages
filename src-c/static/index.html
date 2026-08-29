@@ -1,37 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Zero-Dep Markdown Viewer</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand">Zero-Dep Markdown Viewer</div>
-        <div id="status" class="status ok">Ready</div>
-      </header>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoullessSages Bidirectional Markdown Editor</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- Google Fonts Preconnect and Links -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <div class="logo">
+            <span class="logo-icon">⚡</span>
+            <h1>SoullessSages <span class="logo-subtitle">Markdown</span></h1>
+        </div>
+        <div class="header-actions">
+            <div id="status-container" class="status-badge state-synced">
+                <span class="status-dot" id="status-dot"></span>
+                <span class="status-text" id="status-text">Synced</span>
+            </div>
+        </div>
+    </header>
 
-      <main class="editor-layout">
-        <section class="panel source-panel">
-          <h2>Markdown</h2>
-          <textarea id="source" spellcheck="false"># Hello
-
-This is **bold** and *italic*.
-
-- first item
-- second item
-</textarea>
-        </section>
-
-        <section class="panel preview-panel">
-          <h2>Preview</h2>
-          <div id="preview" class="preview" aria-live="polite"></div>
-        </section>
-      </main>
+    <!-- Error Banner -->
+    <div id="error-banner" class="error-banner hidden">
+        <div class="error-content">
+            <div class="error-header">
+                <span class="error-icon">⚠️</span>
+                <span id="error-msg" class="error-message-text">Error message</span>
+            </div>
+            <pre id="error-snippet" class="error-snippet-pre"></pre>
+        </div>
+        <button id="error-dismiss" class="error-dismiss-btn" aria-label="Dismiss error">&times;</button>
     </div>
 
+    <!-- Main Workspace Split Pane -->
+    <main class="editor-container">
+        <section class="pane source-pane">
+            <div class="pane-header">Markdown Source</div>
+            <textarea id="markdown-source" placeholder="Type your Markdown here..." spellcheck="false" autocomplete="off" autofocus></textarea>
+        </section>
+        
+        <div class="split-divider"></div>
+        
+        <section class="pane preview-pane">
+            <div class="pane-header">Live Preview (Editable)</div>
+            <div id="html-preview" contenteditable="true" placeholder="Type rendered text directly..." spellcheck="false"></div>
+        </section>
+    </main>
+
     <script src="/static/client.js"></script>
-  </body>
+</body>
 </html>
