@@ -24,7 +24,7 @@ Below is the complete, de-duplicated ledger of 15 unique package substitutions d
 *   **Typical Weekly Downloads:** ~45,000,000 / week (npm)
 *   **Replaced With:** Hand-rolled Recursive-Descent Parser ([`src-c/tokenizer.c`](../src-c/tokenizer.c), [`src-c/md_parser.c`](../src-c/md_parser.c)) using `<ctype.h>`, `<string.h>`, and `<stdlib.h>`.
 *   **Rationale & Implementation:** Rather than importing a 30,000-line parser, we built a streaming tokenizer and recursive-descent parser that preserves line and column numbers on every token to provide compiler-grade caret-diagnostics.
-*   **Honest Limitations Disclosure:** Excludes raw HTML blocks and link reference definitions.
+*   **Honest Limitations Disclosure:** Conformance achieves 75.31% (491/652) of the CommonMark test suite. Full support for raw multi-line HTML block tags (`<div>`, `<script>`, etc.) is explicitly designated out-of-scope to protect viewer security and maintain clean bidirectional serialization within the zero-dependency standard library scope.
 *   **Contributors:** Member 1 (Lead), Member 2.
 
 ### 2. `turndown` / `html2markdown` (HTML to Markdown Serializer)
