@@ -365,7 +365,7 @@ int main(void) {
         if (ok) {
             passed++;
             stat->passed++;
-        } else if (shown_failures < 10) {
+        } else if (shown_failures < 200) {
             printf("FAIL example %d [%s]\n", tc.example, tc.section);
             printf("  expected: %s\n", expected_norm ? expected_norm : "(parse/allocation error)");
             printf("  actual:   %s\n", actual_norm ? actual_norm : (res.error_msg ? res.error_msg : "(null)"));

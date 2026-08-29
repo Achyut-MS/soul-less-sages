@@ -90,7 +90,7 @@ bool test_parser_blockquote_empty(void) {
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<blockquote>\n<p></p>\n</blockquote>\n") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<blockquote>\n</blockquote>\n") != NULL);
     ASSERT_TRUE(strstr(res.html, "<p>s</p>\n") != NULL);
     md_parse_result_free(&res);
     return true;
@@ -162,7 +162,7 @@ bool test_parser_escapes_and_special_chars(void) {
     ASSERT_TRUE(strstr(res.html, "&lt;") != NULL);
     ASSERT_TRUE(strstr(res.html, "&gt;") != NULL);
     ASSERT_TRUE(strstr(res.html, "&quot;") != NULL);
-    ASSERT_TRUE(strstr(res.html, "&#39;") != NULL);
+    ASSERT_TRUE(strstr(res.html, "'E'") != NULL);
     ASSERT_TRUE(strstr(res.html, "*escaped*") != NULL);
     md_parse_result_free(&res);
     return true;
@@ -173,7 +173,7 @@ bool test_parser_triple_emphasis(void) {
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<strong><em>bold and italic</em></strong>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<em><strong>bold and italic</strong></em>") != NULL);
     md_parse_result_free(&res);
     return true;
 }
@@ -222,7 +222,7 @@ bool test_parser_code_block_with_lang(void) {
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<pre><code class=\"language-python\">print(&#39;hello&#39;)\n</code></pre>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<pre><code class=\"language-python\">print('hello')\n</code></pre>") != NULL);
     md_parse_result_free(&res);
     return true;
 }

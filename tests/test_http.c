@@ -571,6 +571,7 @@ static bool test_resolve_md_path_windows_drive(void) {
 }
 
 int main(void) {
+    platform_socket_init();
     RUN_TEST(test_extract_json_string);
     RUN_TEST(test_extract_json_string_alloc);
     RUN_TEST(test_json_escape);
@@ -582,6 +583,7 @@ int main(void) {
     RUN_TEST(test_large_json_round_trip);
     RUN_TEST(test_large_file_read_is_not_truncated);
     RUN_TEST(test_resolve_md_path_windows_drive);
+    platform_socket_cleanup();
     printf("\nTest Summary: %d run, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
 }
