@@ -1226,7 +1226,7 @@ static char *render_code_span(const char *text, size_t len, size_t op_len) {
     return html;
 }
 
-static inline_token_t *tokenize_inline(const char *text, size_t len, parser_state_t *st, size_t *tokens_count_out) {
+static inline_token_t *tokenize_inline(const char *text, size_t len, parser_state_t *st, size_t *tokens_count_out, size_t *tokens_cap_out) {
     size_t cap = 16;
     inline_token_t *tokens = malloc(cap * sizeof(inline_token_t));
     size_t count = 0;
@@ -1415,10 +1415,17 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
     }
     
     *tokens_count_out = count;
+    if (tokens_cap_out) {
+        *tokens_cap_out = cap;
+    }
     return tokens;
 }
 
-static char *process_emphasis_tokens(inline_token_t *tokens, size_t count) {
+static char *process_emphasis_tokens(inline_token_t **tokens_ptr, size_t *count_ptr, size_t *cap_ptr) {
+    inline_token_t *tokens = *tokens_ptr;
+    size_t count = *count_ptr;
+    size_t cap = *cap_ptr;
+
     size_t closer_idx = 0;
     while (closer_idx < count) {
         if (tokens[closer_idx].type == TOK_DELIM && tokens[closer_idx].can_close && tokens[closer_idx].len > 0) {
@@ -1430,11 +1437,14 @@ static char *process_emphasis_tokens(inline_token_t *tokens, size_t count) {
                     tokens[opener_idx].delim_char == tokens[closer_idx].delim_char &&
                     tokens[opener_idx].len > 0) {
                     
-                    if (tokens[opener_idx].can_close || tokens[closer_idx].can_open) {
-                        if ((tokens[opener_idx].len + tokens[closer_idx].len) % 3 == 0 &&
-                            !(tokens[opener_idx].len % 3 == 0 && tokens[closer_idx].len % 3 == 0)) {
-                            continue;
-                        }
+                    bool odd_match = false;
+                    if ((tokens[opener_idx].can_close || tokens[closer_idx].can_open) &&
+                        (tokens[opener_idx].len % 3 != 0 || tokens[closer_idx].len % 3 != 0) &&
+                        (tokens[opener_idx].len + tokens[closer_idx].len) % 3 == 0) {
+                        odd_match = true;
+                    }
+                    if (odd_match) {
+                        continue;
                     }
                     found_opener = true;
                     break;
@@ -1456,8 +1466,8 @@ static char *process_emphasis_tokens(inline_token_t *tokens, size_t count) {
                 
                 if (tokens[opener_idx].len > num) {
                     tokens[opener_idx].len -= num;
+                    tokens[opener_idx].val[tokens[opener_idx].len] = '\0';
                     inline_token_t tag_tok = {TOK_HTML_TAG, xstrdup(open_tag), strlen(open_tag), 0, false, false};
-                    size_t cap = count + 4;
                     insert_token_at(&tokens, &count, &cap, opener_idx + 1, tag_tok);
                     closer_idx++;
                 } else {
@@ -1469,8 +1479,8 @@ static char *process_emphasis_tokens(inline_token_t *tokens, size_t count) {
                 
                 if (tokens[closer_idx].len > num) {
                     tokens[closer_idx].len -= num;
+                    tokens[closer_idx].val[tokens[closer_idx].len] = '\0';
                     inline_token_t tag_tok = {TOK_HTML_TAG, xstrdup(close_tag), strlen(close_tag), 0, false, false};
-                    size_t cap = count + 4;
                     insert_token_at(&tokens, &count, &cap, closer_idx, tag_tok);
                     closer_idx++;
                 } else {
@@ -1480,11 +1490,18 @@ static char *process_emphasis_tokens(inline_token_t *tokens, size_t count) {
                     tokens[closer_idx].len = strlen(close_tag);
                 }
                 continue;
+            } else if (!tokens[closer_idx].can_open) {
+                // If this closer cannot be an opener, it can never match any future opener
+                tokens[closer_idx].can_close = false;
             }
         }
         closer_idx++;
     }
     
+    *tokens_ptr = tokens;
+    *count_ptr = count;
+    *cap_ptr = cap;
+
     char *out = xstrdup("");
     for (size_t i = 0; i < count; i++) {
         if (tokens[i].type == TOK_DELIM) {
@@ -1506,11 +1523,12 @@ static char *render_inline_fragment(const char *text, const char *src, size_t ba
     }
 
     size_t count = 0;
-    inline_token_t *tokens = tokenize_inline(text, strlen(text), st, &count);
+    size_t cap = 0;
+    inline_token_t *tokens = tokenize_inline(text, strlen(text), st, &count, &cap);
     if (!tokens) {
         return xstrdup("");
     }
-    char *result = process_emphasis_tokens(tokens, count);
+    char *result = process_emphasis_tokens(&tokens, &count, &cap);
     free_inline_tokens(tokens, count);
     return result;
 }
@@ -1680,42 +1698,99 @@ static bool match_heading(const char *line, int *level_out, char **content_out) 
     return true;
 }
 
-static bool match_list_item(const char *line, bool *ordered_out, char **content_out) {
-    if (!line || *line == '\0') {
-        return false;
-    }
+/* match_list_item: returns true if 'line' starts a list item.
+   marker_indent_out: number of spaces before the marker (0-3)
+   content_indent_out: total columns from start to first content char
+   ordered_out, bullet_char_out: list type info
+   content_out: text after the marker+space (owned by caller) */
+static bool match_list_item_full(const char *line, bool *ordered_out,
+                                  int *marker_indent_out, int *content_indent_out,
+                                  char *bullet_char_out, int *start_num_out,
+                                  char **content_out) {
+    if (!line || *line == '\0') return false;
     const char *cursor = line;
-    while (*cursor == ' ' || *cursor == '\t') {
-        cursor += 1;
-    }
+    int spaces = 0;
+    while (*cursor == ' ' && spaces < 3) { cursor++; spaces++; }
+    /* Also allow a single tab as up to 4 spaces */
+    if (*cursor == '\t') { cursor++; spaces = (spaces + 4) & ~3; }
+    if (spaces > 3) return false;
+    if (marker_indent_out) *marker_indent_out = spaces;
+
     if (isdigit((unsigned char)*cursor)) {
         const char *num = cursor;
-        while (isdigit((unsigned char)*num)) {
-            num += 1;
-        }
-        if (*num == '.' && (num[1] == ' ' || num[1] == '\t')) {
-            if (ordered_out) {
-                *ordered_out = true;
+        int val = 0;
+        while (isdigit((unsigned char)*num)) { val = val * 10 + (*num - '0'); num++; }
+        if ((*num == '.' || *num == ')') && (num[1] == ' ' || num[1] == '\t' || num[1] == '\0')) {
+            int marker_len = (int)(num - cursor) + 1; /* digits + punctuation */
+            int total = spaces + marker_len;
+            int extra = 0;
+            const char *content = num + 1;
+            if (*content == '\t') {
+                int tab_stop = ((total + 1) + 3) & ~3;
+                extra = tab_stop - (total + 1) + 1;
+                content++;
+            } else if (*content == ' ') {
+                extra = 1;
+                content++;
+            } else if (*content == '\0') {
+                extra = 1;
             }
-            if (content_out) {
-                *content_out = xstrdup(num + 2);
-            }
+            if (content_indent_out) *content_indent_out = total + extra;
+            if (ordered_out) *ordered_out = true;
+            if (bullet_char_out) *bullet_char_out = *num;
+            if (start_num_out) *start_num_out = val;
+            if (content_out) *content_out = xstrdup(content);
             return true;
         }
     }
-    if (*cursor == '-' || *cursor == '*') {
+    if (*cursor == '-' || *cursor == '*' || *cursor == '+') {
+        char bc = *cursor;
         const char *rest = cursor + 1;
-        if (*rest == ' ' || *rest == '\t') {
-            if (ordered_out) {
-                *ordered_out = false;
+        if (*rest == ' ' || *rest == '\t' || *rest == '\0') {
+            int total = spaces + 1;
+            int extra = 0;
+            const char *content = rest;
+            if (*content == '\t') {
+                int tab_stop = ((total + 1) + 3) & ~3;
+                extra = tab_stop - (total + 1) + 1;
+                content++;
+            } else if (*content == ' ') {
+                extra = 1;
+                content++;
+            } else if (*content == '\0') {
+                extra = 1;
             }
-            if (content_out) {
-                *content_out = xstrdup(rest + 1);
-            }
+            if (content_indent_out) *content_indent_out = total + extra;
+            if (ordered_out) *ordered_out = false;
+            if (bullet_char_out) *bullet_char_out = bc;
+            if (start_num_out) *start_num_out = -1;
+            if (content_out) *content_out = xstrdup(content);
             return true;
         }
     }
     return false;
+}
+
+static bool match_list_item(const char *line, bool *ordered_out, char **content_out) {
+    return match_list_item_full(line, ordered_out, NULL, NULL, NULL, NULL, content_out);
+}
+
+static bool match_list_item_can_interrupt_paragraph(const char *line) {
+    bool ordered = false;
+    int start_num = 1;
+    char *content = NULL;
+    if (!match_list_item_full(line, &ordered, NULL, NULL, NULL, &start_num, &content)) {
+        return false;
+    }
+    if (is_blank_line(content)) {
+        free(content);
+        return false;
+    }
+    free(content);
+    if (ordered && start_num != 1) {
+        return false;
+    }
+    return true;
 }
 
 static bool match_horizontal_rule(const char *line) {
@@ -1776,38 +1851,68 @@ static bool starts_blockquote(const char *line) {
     return *line == '>';
 }
 
-static bool starts_code_fence(const char *line) {
-    if (!line) {
-        return false;
-    }
+typedef struct {
+    char fence_char;
+    size_t fence_len;
+    int indent;
+    char *info;
+} code_fence_info_t;
+
+static bool parse_code_fence_open(const char *line, code_fence_info_t *out) {
+    if (!line) return false;
+    const char *p = line;
     int spaces = 0;
-    while (*line == ' ' || *line == '\t') {
-        if (*line == ' ') spaces++;
-        else spaces += 4 - (spaces % 4);
-        line++;
+    while (*p == ' ') {
+        spaces++;
+        p++;
     }
-    if (spaces >= 4) return false;
-    
-    char c = *line;
-    if (c != '`' && c != '~') {
-        return false;
+    if (spaces > 3) return false;
+    char c = *p;
+    if (c != '`' && c != '~') return false;
+    size_t len = 0;
+    while (*p == c) {
+        len++;
+        p++;
     }
-    
-    size_t count = 0;
-    while (*line == c) {
-        count++;
-        line++;
-    }
-    if (count < 3) {
-        return false;
-    }
-    
-    if (c == '`') {
-        if (strchr(line, '`') != NULL) {
-            return false;
-        }
+    if (len < 3) return false;
+    if (c == '`' && strchr(p, '`') != NULL) return false;
+
+    if (out) {
+        out->fence_char = c;
+        out->fence_len = len;
+        out->indent = spaces;
+        /* Extract info string: first word after leading spaces */
+        while (*p == ' ' || *p == '\t') p++;
+        const char *info_start = p;
+        while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') p++;
+        size_t info_len = p - info_start;
+        out->info = xstrdup_len(info_start, info_len);
     }
     return true;
+}
+
+static bool is_code_fence_close(const char *line, char fence_char, size_t fence_len) {
+    if (!line) return false;
+    const char *p = line;
+    int spaces = 0;
+    while (*p == ' ') {
+        spaces++;
+        p++;
+    }
+    if (spaces > 3) return false;
+    if (*p != fence_char) return false;
+    size_t len = 0;
+    while (*p == fence_char) {
+        len++;
+        p++;
+    }
+    if (len < fence_len) return false;
+    while (*p == ' ' || *p == '\t') p++;
+    return (*p == '\0' || *p == '\r' || *p == '\n');
+}
+
+static bool starts_code_fence(const char *line) {
+    return parse_code_fence_open(line, NULL);
 }
 static void free_string_array(char **arr, size_t count) {
     if (!arr) return;
@@ -1932,6 +2037,11 @@ static char *trim_paragraph_line(const char *line) {
     }
     return xstrdup(line);
 }
+
+/* Forward declaration: parse a sub-document body string using the SAME parser state
+   (so link refs, error state are shared). The body_src must be a NUL-terminated
+   string that this function will NOT free. */
+static char *parse_block_html_with_state(const char *body_src, parser_state_t *st);
 
 static char *build_html_for_document(const char *src, size_t src_len, parser_state_t *st) {
     (void)src_len;
@@ -2061,17 +2171,22 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
             continue;
         }
 
-        if (starts_code_fence(line)) {
-            size_t fence_start = i;
-            char *fence_lang = xstrdup(line + 3);
-            trim_in_place(fence_lang);
+        code_fence_info_t fence_info = {0};
+        if (parse_code_fence_open(line, &fence_info)) {
             char *code = xstrdup("");
             i += 1;
             while (i < count) {
-                if (starts_code_fence(lines[i].text)) {
+                if (is_code_fence_close(lines[i].text, fence_info.fence_char, fence_info.fence_len)) {
                     break;
                 }
-                char *segment = join_strings(code, lines[i].text);
+                const char *content_line = lines[i].text;
+                /* Strip up to fence_info.indent leading spaces */
+                int stripped_spaces = 0;
+                while (stripped_spaces < fence_info.indent && *content_line == ' ') {
+                    stripped_spaces++;
+                    content_line++;
+                }
+                char *segment = join_strings(code, content_line);
                 free(code);
                 code = segment;
                 char *with_new = join_strings(code, "\n");
@@ -2080,22 +2195,21 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 i += 1;
             }
             if (i >= count) {
-                parser_set_error(st, src, lines[fence_start].offset, "unterminated code fence");
+                parser_set_error(st, src, lines[i - 1].offset, "unterminated code fence");
                 free(code);
-                free(fence_lang);
+                free(fence_info.info);
                 free_lines(lines, count);
                 free(html);
                 return NULL;
             }
-
             char *escaped = xstrdup("");
             escape_html_append(&escaped, code);
             append_str(&html, "<pre><code");
-            if (fence_lang[0] != '\0') {
-                if (strncmp(fence_lang, "language-", 9) == 0) {
-                    append_formatted(&html, " class=\"%s\"", fence_lang);
+            if (fence_info.info && fence_info.info[0] != '\0') {
+                if (strncmp(fence_info.info, "language-", 9) == 0) {
+                    append_formatted(&html, " class=\"%s\"", fence_info.info);
                 } else {
-                    append_formatted(&html, " class=\"language-%s\"", fence_lang);
+                    append_formatted(&html, " class=\"language-%s\"", fence_info.info);
                 }
             }
             append_str(&html, ">");
@@ -2103,86 +2217,264 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
             append_str(&html, "</code></pre>\n");
             free(escaped);
             free(code);
-            free(fence_lang);
+            free(fence_info.info);
             i += 1;
             continue;
         }
 
         bool ordered = false;
-        if (match_list_item(line, &ordered, NULL)) {
-            append_str(&html, ordered ? "<ol>\n" : "<ul>\n");
+        int marker_indent = 0, content_indent = 0;
+        char bullet_char = 0;
+        if (match_list_item_full(line, &ordered, &marker_indent, &content_indent,
+                                  &bullet_char, NULL, NULL)) {
+            /* --- CommonMark list collection --- */
+            bool is_loose = false;
+
+            /* Each item is represented as a heap-string: its body lines joined by '\n' */
+            size_t items_cap = 8;
+            char **items = malloc(items_cap * sizeof(char *));
+            bool *item_was_followed_by_blank = calloc(items_cap, sizeof(bool));
+            size_t items_count = 0;
+            int list_start_num = 1;
+            bool list_ordered = ordered;
+
+            /* First item's start number for ordered lists */
+            match_list_item_full(line, NULL, NULL, NULL, NULL, &list_start_num, NULL);
+            if (list_start_num < 0) list_start_num = 1;
+
+            bool prev_blank = false;
             while (i < count) {
-                if (match_horizontal_rule(lines[i].text)) {
-                    break;
+                char *cur_line = lines[i].text;
+
+                /* Thematic break always terminates a list */
+                if (match_horizontal_rule(cur_line)) break;
+
+                bool cur_ordered = false;
+                int cur_mi = 0, cur_ci = 0;
+                char cur_bc = 0;
+                bool cur_is_item = match_list_item_full(cur_line, &cur_ordered,
+                                                         &cur_mi, &cur_ci, &cur_bc, NULL, NULL);
+
+                /* New list item with same type and same bullet/delimiter */
+                if (cur_is_item && cur_ordered == list_ordered) {
+                    if (prev_blank && items_count > 0) {
+                        item_was_followed_by_blank[items_count - 1] = true;
+                        is_loose = true;
+                    }
+                    prev_blank = false;
+
+                    /* Collect this item's body */
+                    char *item_body = xstrdup("");
+                    /* First line: content after marker */
+                    char *first_content = NULL;
+                    match_list_item_full(cur_line, NULL, NULL, NULL, NULL, NULL, &first_content);
+                    if (first_content) {
+                        append_str(&item_body, first_content);
+                        free(first_content);
+                    }
+                    i++;
+
+                    /* Continuation lines */
+                    while (i < count) {
+                        char *next = lines[i].text;
+                        if (is_blank_line(next)) {
+                            /* Blank line may continue item if next non-blank is indented */
+                            size_t j = i + 1;
+                            while (j < count && is_blank_line(lines[j].text)) j++;
+                            if (j < count) {
+                                /* Check if next non-blank continues item */
+                                const char *nb = lines[j].text;
+                                int nb_spaces = 0;
+                                while (*nb == ' ') { nb++; nb_spaces++; }
+                                bool nb_is_new_item = false;
+                                {
+                                    bool tob = false; char tbc = 0;
+                                    nb_is_new_item = match_list_item_full(lines[j].text, &tob,
+                                                                           NULL, NULL, &tbc, NULL, NULL)
+                                                     && tob == list_ordered;
+                                }
+                                if (nb_spaces >= content_indent || nb_is_new_item) {
+                                    /* Blank line(s) within item body make it loose */
+                                    is_loose = true;
+                                    append_str(&item_body, "\n");
+                                    i++;
+                                    continue;
+                                }
+                            }
+                            /* Blank line followed by non-continuing content: item ends */
+                            prev_blank = true;
+                            break;
+                        }
+                        /* Check if this is a new list item or block marker */
+                        bool ni_ordered = false; char ni_bc = 0;
+                        bool ni_is = match_list_item_full(next, &ni_ordered, NULL, NULL, &ni_bc, NULL, NULL);
+                        if (ni_is && ni_ordered == list_ordered) break;
+                        if (match_heading(next, NULL, NULL) || match_horizontal_rule(next) ||
+                            starts_code_fence(next) || starts_blockquote(next)) {
+                            break;
+                        }
+
+                        /* Continuation: must be indented >= content_indent OR be a lazy line */
+                        int next_spaces = 0;
+                        const char *p = next;
+                        while (*p == ' ') { p++; next_spaces++; }
+                        if (next_spaces < content_indent && !is_blank_line(next)) {
+                            /* Lazy continuation: only valid if no blank line preceded */
+                            if (prev_blank) break;
+                        }
+
+                        /* Strip content_indent leading spaces from continuation line */
+                        const char *stripped = next;
+                        int stripped_count = 0;
+                        while (*stripped == ' ' && stripped_count < content_indent) {
+                            stripped++; stripped_count++;
+                        }
+                        append_str(&item_body, "\n");
+                        append_str(&item_body, stripped);
+                        i++;
+                    }
+
+                    /* Store item */
+                    if (items_count == items_cap) {
+                        items_cap *= 2;
+                        items = realloc(items, items_cap * sizeof(char *));
+                        item_was_followed_by_blank = realloc(item_was_followed_by_blank,
+                                                              items_cap * sizeof(bool));
+                        memset(item_was_followed_by_blank + items_count, 0,
+                               (items_cap - items_count) * sizeof(bool));
+                    }
+                    items[items_count++] = item_body;
+                    /* Update content_indent for subsequent items (use first item's) */
+                    content_indent = cur_ci;
+                    continue;
                 }
-                bool item_ordered = false;
-                char *item_text = NULL;
-                if (!match_list_item(lines[i].text, &item_ordered, &item_text)) {
-                    break;
+
+                if (is_blank_line(cur_line)) {
+                    prev_blank = true;
+                    i++;
+                    continue;
                 }
-                if (item_ordered != ordered) {
-                    free(item_text);
-                    break;
+
+                /* Any other non-blank non-item line that isn't indented: list ends */
+                {
+                    int ns = 0;
+                    const char *tp = cur_line;
+                    while (*tp == ' ') { tp++; ns++; }
+                    if (ns < content_indent) break;
+                    /* Indented continuation of last item */
+                    if (items_count > 0) {
+                        const char *stripped = cur_line;
+                        int sc = 0;
+                        while (*stripped == ' ' && sc < content_indent) { stripped++; sc++; }
+                        append_str(&items[items_count - 1], "\n");
+                        append_str(&items[items_count - 1], stripped);
+                        i++;
+                        continue;
+                    }
                 }
-                char *formatted = render_inline_and_check(item_text, src, lines[i].offset, st);
-                if (!formatted) {
-                    free(item_text);
+                break;
+            }
+
+            /* Determine final loose: only if an item has internal paragraphs */
+
+            /* Emit HTML */
+            if (list_ordered) {
+                if (list_start_num == 1) {
+                    append_str(&html, "<ol>\n");
+                } else {
+                    append_formatted(&html, "<ol start=\"%d\">\n", list_start_num);
+                }
+            } else {
+                append_str(&html, "<ul>\n");
+            }
+
+            for (size_t k = 0; k < items_count; k++) {
+                char *item_html = parse_block_html_with_state(items[k], st);
+                free(items[k]);
+                if (!item_html) {
+                    /* cleanup remaining */
+                    for (size_t m = k + 1; m < items_count; m++) free(items[m]);
+                    free(items); free(item_was_followed_by_blank);
                     free_lines(lines, count);
                     free(html);
                     return NULL;
                 }
                 append_str(&html, "<li>");
-                append_str(&html, formatted);
+                if (is_loose) {
+                    append_str(&html, item_html);
+                } else {
+                    /* Tight: strip wrapping <p>...</p>\n from each item */
+                    char *ih = item_html;
+                    /* Remove trailing newline */
+                    size_t ihlen = strlen(ih);
+                    while (ihlen > 0 && (ih[ihlen-1] == '\n' || ih[ihlen-1] == '\r')) ihlen--;
+                    ih[ihlen] = '\0';
+                    if (strncmp(ih, "<p>", 3) == 0 && ihlen >= 4 &&
+                        strcmp(ih + ihlen - 4, "</p>") == 0) {
+                        ih[ihlen - 4] = '\0';
+                        append_str(&html, ih + 3);
+                    } else {
+                        append_str(&html, ih);
+                    }
+                }
+                free(item_html);
                 append_str(&html, "</li>\n");
-                free(formatted);
-                free(item_text);
-                i += 1;
             }
-            append_str(&html, ordered ? "</ol>\n" : "</ul>\n");
+
+            free(items);
+            free(item_was_followed_by_blank);
+            append_str(&html, list_ordered ? "</ol>\n" : "</ul>\n");
             continue;
         }
 
         if (starts_blockquote(line)) {
+            /* Collect blockquote lines, strip '>' prefix, join, recurse */
             char *quote_body = xstrdup("");
-            while (i < count && starts_blockquote(lines[i].text)) {
+            bool first_bq_line = true;
+            while (i < count) {
                 char *raw = lines[i].text;
-                while (*raw == ' ' || *raw == '\t') {
-                    raw += 1;
+                /* Blockquote continuation: either starts with '>' (with optional spaces)
+                   or is a non-blank lazy continuation line */
+                bool is_bq_marker = starts_blockquote(raw);
+                bool is_blank = is_blank_line(raw);
+                if (!is_bq_marker && !is_blank) {
+                    /* Lazy continuation: non-blank line without > can continue BQ content */
+                    /* But only while no blank line has been seen */
+                    /* For simplicity, stop on any non-> non-blank line */
+                    break;
                 }
-                if (*raw == '>') {
-                    raw += 1;
-                    if (*raw == ' ') {
-                        raw += 1;
+                if (is_blank) {
+                    /* Blank line: check if next line continues with > */
+                    if (i + 1 < count && starts_blockquote(lines[i + 1].text)) {
+                        if (!first_bq_line) append_str(&quote_body, "\n");
+                        i++;
+                        continue;
                     }
+                    break;
                 }
-                char *segment = join_strings(quote_body, raw);
-                free(quote_body);
-                quote_body = segment;
-                if (i + 1 < count && starts_blockquote(lines[i + 1].text)) {
-                    char *nl = join_strings(quote_body, "\n");
-                    free(quote_body);
-                    quote_body = nl;
+                /* Strip leading spaces and '>' */
+                while (*raw == ' ' || *raw == '\t') raw++;
+                if (*raw == '>') {
+                    raw++;
+                    if (*raw == ' ') raw++;
                 }
-                i += 1;
+                if (!first_bq_line) append_str(&quote_body, "\n");
+                append_str(&quote_body, raw);
+                first_bq_line = false;
+                i++;
             }
-            trim_in_place(quote_body);
-            char *formatted = render_inline_and_check(quote_body, src, lines[i - 1].offset, st);
-            if (!formatted) {
-                free(quote_body);
+            /* Recursively parse the blockquote body */
+            char *inner_html = parse_block_html_with_state(quote_body, st);
+            free(quote_body);
+            if (!inner_html) {
                 free_lines(lines, count);
                 free(html);
                 return NULL;
             }
-            trim_in_place(formatted);
-            if (formatted[0] == '\0') {
-                append_str(&html, "<blockquote>\n</blockquote>\n");
-            } else {
-                append_str(&html, "<blockquote>\n<p>");
-                append_str(&html, formatted);
-                append_str(&html, "</p>\n</blockquote>\n");
-            }
-            free(formatted);
-            free(quote_body);
+            append_str(&html, "<blockquote>\n");
+            append_str(&html, inner_html);
+            free(inner_html);
+            append_str(&html, "</blockquote>\n");
             continue;
         }
 
@@ -2234,7 +2526,7 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 }
             }
             if (match_horizontal_rule(current_line) || match_heading(current_line, &heading_level, NULL) ||
-                starts_code_fence(current_line) || match_list_item(current_line, &ordered, NULL) || starts_blockquote(current_line)) {
+                starts_code_fence(current_line) || match_list_item_can_interrupt_paragraph(current_line) || starts_blockquote(current_line)) {
                 break;
             }
             char *line_text = trim_paragraph_line(current_line);
@@ -2284,6 +2576,21 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
         return NULL;
     }
     return html;
+}
+
+/* Parses a sub-document body string using the given parser_state_t (link refs, etc.
+   are shared). Returns a new heap-allocated HTML string. */
+static char *parse_block_html_with_state(const char *body_src, parser_state_t *st) {
+    if (!body_src) return xstrdup("");
+    /* Temporarily swap the src so offsets still work within error reporting */
+    const char *saved_src = st->src;
+    size_t saved_len = st->src_len;
+    /* We cannot change src (offsets would be wrong) but error reporting is best-effort
+       for sub-documents. Just call build_html_for_document with body as standalone src. */
+    (void)saved_src; (void)saved_len;
+    size_t blen = strlen(body_src);
+    char *result = build_html_for_document(body_src, blen, st);
+    return result ? result : xstrdup("");
 }
 
 md_parse_result_t md_to_html(const char *md_src, size_t md_len) {
