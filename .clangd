@@ -1,3 +1,18 @@
 CompileFlags:
-  Add: [-std=c23, -Wall, -Wextra]
-  Compiler: gcc
+  Add:
+    - --target=x86_64-w64-mingw32
+    - -std=c2x
+    - -Wall
+    - -Wextra
+    - -isystem
+    - C:/msys64/ucrt64/include
+    - -isystem
+    - C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/13.2.0/include
+    - -isystem
+    - C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed
+
+---
+If:
+  PathMatch: .*\.h
+CompileFlags:
+  Add: [-xc-header]

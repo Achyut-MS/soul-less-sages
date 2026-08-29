@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 #ifndef _WIN32
 #include <dirent.h>
 #include <sys/stat.h>
@@ -49,7 +50,11 @@ platform_socket_t g_server_fd = PLATFORM_INVALID_SOCKET;
 static char g_initial_file[512] = {0};
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <winsock2.h>
+#include <windows.h>
 #define recv_socket(s, b, l, f) recv(s, b, (int)(l), f)
 #define send_socket(s, b, l, f) send(s, b, (int)(l), f)
 #define close_socket(s) closesocket(s)
@@ -421,6 +426,42 @@ static void handle_list_files(platform_socket_t client_fd) {
     size_t j = 0;
     resp_json[j++] = '[';
 
+#ifdef _WIN32
+    WIN32_FIND_DATAA find_data;
+    HANDLE hFind = FindFirstFileA("./*", &find_data);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        bool first = true;
+        do {
+            if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                const char *name = find_data.cFileName;
+                size_t nlen = strlen(name);
+                bool is_md = false;
+                if (nlen > 3 && strcmp(name + nlen - 3, ".md") == 0) is_md = true;
+                if (nlen > 9 && strcmp(name + nlen - 9, ".markdown") == 0) is_md = true;
+                if (!is_md) continue;
+
+                ULARGE_INTEGER size;
+                size.LowPart = find_data.nFileSizeLow;
+                size.HighPart = find_data.nFileSizeHigh;
+
+                ULARGE_INTEGER ull;
+                ull.LowPart = find_data.ftLastWriteTime.dwLowDateTime;
+                ull.HighPart = find_data.ftLastWriteTime.dwHighDateTime;
+                time_t mtime = (time_t)((ull.QuadPart - 116444736000000000ULL) / 10000000ULL);
+
+                char esc_name[1024];
+                json_escape(name, esc_name, sizeof(esc_name));
+                int written = snprintf(resp_json + j, FILES_JSON_MAX - j,
+                    "%s{\"name\":\"%s\",\"size\":%ld,\"mtime\":%ld}",
+                    first ? "" : ",", esc_name, (long)size.QuadPart, (long)mtime);
+                if (written < 0) break;
+                j += (size_t)written;
+                first = false;
+            }
+        } while (FindNextFileA(hFind, &find_data) && j < FILES_JSON_MAX - 512);
+        FindClose(hFind);
+    }
+#else
     DIR *dir = opendir(".");
     if (dir) {
         struct dirent *entry;
@@ -447,6 +488,7 @@ static void handle_list_files(platform_socket_t client_fd) {
         }
         closedir(dir);
     }
+#endif
 
     if (j < FILES_JSON_MAX - 2) {
         resp_json[j++] = ']';
