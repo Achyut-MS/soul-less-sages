@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zero-Dep Markdown Viewer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">Zero-Dep Markdown Viewer</div>
+        <div id="status" class="status ok">Ready</div>
+      </header>
+
+      <main class="editor-layout">
+        <section class="panel source-panel">
+          <h2>Markdown</h2>
+          <textarea id="source" spellcheck="false"># Hello
+
+This is **bold** and *italic*.
+
+- first item
+- second item
+</textarea>
+        </section>
+
+        <section class="panel preview-panel">
+          <h2>Preview</h2>
+          <div id="preview" class="preview" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/client.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+Zero-Dependency Proof
+
+This project intentionally uses only the C standard library and browser-native JavaScript/CSS.
+No package.json, Cargo.toml, Pipfile, go.mod, requirements.txt, or external runtime library is required.
+
+Runtime dependency check:
+- C standard library: yes
+- Browser APIs: yes (native DOM, fetch)
+- Third-party libs: none
+- External runtime package manager: none
