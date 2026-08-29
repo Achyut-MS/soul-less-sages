@@ -443,11 +443,8 @@ static void split_lines(const char *src, line_record_t **lines_out, size_t *coun
     const char *start = src;
     const char *p = src;
     while (*p != '\0') {
-        if (*p == '\n') {
+        if (*p == '\n' || *p == '\r') {
             size_t len = (size_t)(p - start);
-            if (len > 0 && start[len - 1] == '\r') {
-                len -= 1;
-            }
             if (count == cap) {
                 cap *= 2;
                 line_record_t *new_lines = (line_record_t *)realloc(lines, cap * sizeof(line_record_t));
@@ -463,6 +460,10 @@ static void split_lines(const char *src, line_record_t **lines_out, size_t *coun
             lines[count].line = count + 1;
             lines[count].offset = (size_t)(start - src);
             count += 1;
+
+            if (*p == '\r' && *(p + 1) == '\n') {
+                p += 1;
+            }
             start = p + 1;
         }
         p += 1;
@@ -480,9 +481,6 @@ static void split_lines(const char *src, line_record_t **lines_out, size_t *coun
                 return;
             }
             lines = new_lines;
-        }
-        if (last_len > 0 && start[last_len - 1] == '\r') {
-            last_len -= 1;
         }
         lines[count].text = xstrdup_len(start, last_len);
         lines[count].line = count + 1;
@@ -720,6 +718,7 @@ static bool match_table_delimiter(const char *line, size_t *col_count_out) {
 static char *render_inline_and_check(const char *text, const char *src, size_t base_offset, parser_state_t *st) {
     char *result = render_inline_fragment(text, src, base_offset, st);
     if (st->has_error) {
+        free(result);
         return NULL;
     }
     return result;
@@ -883,6 +882,7 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 char *formatted = render_inline_and_check(item_text, src, lines[i].offset, st);
                 if (!formatted) {
                     free(item_text);
+                    free(list_item);
                     free_lines(lines, count);
                     free(html);
                     return NULL;
@@ -923,19 +923,17 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 i += 1;
             }
             trim_in_place(quote_body);
-            if (quote_body[0] != '\0') {
-                char *formatted = render_inline_and_check(quote_body, src, lines[i - 1].offset, st);
-                if (!formatted) {
-                    free(quote_body);
-                    free_lines(lines, count);
-                    free(html);
-                    return NULL;
-                }
-                append_str(&html, "<blockquote><p>");
-                append_str(&html, formatted);
-                append_str(&html, "</p></blockquote>\n");
-                free(formatted);
+            char *formatted = render_inline_and_check(quote_body, src, lines[i - 1].offset, st);
+            if (!formatted) {
+                free(quote_body);
+                free_lines(lines, count);
+                free(html);
+                return NULL;
             }
+            append_str(&html, "<blockquote>\n<p>");
+            append_str(&html, formatted);
+            append_str(&html, "</p>\n</blockquote>\n");
+            free(formatted);
             free(quote_body);
             continue;
         }
@@ -950,8 +948,8 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
             if (i + 1 < count && match_table_delimiter(lines[i + 1].text, NULL)) {
                 break;
             }
-            if (match_horizontal_rule(current_line) || match_heading(current_line, &heading_level, &heading_content) ||
-                starts_code_fence(current_line) || match_list_item(current_line, &ordered, &list_item) || starts_blockquote(current_line)) {
+            if (match_horizontal_rule(current_line) || match_heading(current_line, &heading_level, NULL) ||
+                starts_code_fence(current_line) || match_list_item(current_line, &ordered, NULL) || starts_blockquote(current_line)) {
                 break;
             }
             char *line_text = xstrdup(current_line);

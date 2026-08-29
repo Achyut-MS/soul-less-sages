@@ -34,6 +34,7 @@
 #include "html_serializer.h"
 #include "file_writer.h"
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -48,6 +49,8 @@
 volatile sig_atomic_t g_keep_running = 1;
 platform_socket_t g_server_fd = PLATFORM_INVALID_SOCKET;
 static char g_initial_file[512] = {0};
+
+static bool resolve_md_path(const char *user_path, char *out, size_t out_max);
 
 #define HTTP_HEADER_LIMIT 65536u
 #define HTTP_BODY_LIMIT (8u * 1024u * 1024u)
@@ -373,6 +376,10 @@ char *http_test_json_escape_alloc(const char *src) {
 char *http_test_read_text_file_limit(const char *path, size_t limit, bool *too_large) {
     return read_text_file_limit(path, limit, too_large);
 }
+
+bool http_test_resolve_md_path(const char *user_path, char *out, size_t out_max) {
+    return resolve_md_path(user_path, out, out_max);
+}
 #endif
 
 /* Helper to send complete HTTP response */
@@ -579,6 +586,7 @@ static bool get_query_param(const char *path, const char *key, char *out, size_t
 static bool resolve_md_path(const char *user_path, char *out, size_t out_max) {
     if (!user_path || user_path[0] == '\0') return false;
     if (user_path[0] == '/' || user_path[0] == '\\') return false;
+    if (isalpha((unsigned char)user_path[0]) && user_path[1] == ':') return false;
     if (strstr(user_path, "..")) return false;
     size_t len = strlen(user_path);
     bool is_md = (len > 3 && strcmp(user_path + len - 3, ".md") == 0) ||

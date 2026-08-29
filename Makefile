@@ -108,13 +108,13 @@ coverage: clean test
 	@echo ===========================================
 	@echo Generating Coverage Reports
 	@echo ===========================================
-	-@lcov --capture --directory . --output-file coverage.info > $(DEVNULL) 2>&1 || true
-	@gcov -o test_parser-md_parser.gcno src-c/md_parser.c | $(FILTER_COV)
-	@gcov -o test_html_serializer-html_serializer.gcno src-c/html_serializer.c | $(FILTER_COV)
-	@gcov -o test_platform-platform.gcno src-c/platform.c | $(FILTER_COV)
-	@gcov -o test_file_writer-file_writer.gcno src-c/file_writer.c | $(FILTER_COV)
-	@gcov src-c/http.c | $(FILTER_COV)
-	@gcov src-c/main.c | $(FILTER_COV)
+	-@lcov --capture --directory . --output-file coverage.info > $(DEVNULL) 2>&1
+	@gcov -o parser_check-md_parser.gcno src-c/md_parser.c | $(FILTER_COV)
+	@gcov -o html_serializer_check-html_serializer.gcno src-c/html_serializer.c | $(FILTER_COV)
+	@gcov -o platform_check-platform.gcno src-c/platform.c | $(FILTER_COV)
+	@gcov -o file_writer_check-file_writer.gcno src-c/file_writer.c | $(FILTER_COV)
+	@gcov -o net_payload_check-http.gcno src-c/http.c | $(FILTER_COV)
+	@gcov -o src-c/main.o src-c/main.c | $(FILTER_COV)
 
 # Fuzzing target — DURATION= sets the budget in seconds (default 300 = 5 min)
 fuzz: fuzz_roundtrip$(EXE)

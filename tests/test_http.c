@@ -7,6 +7,7 @@
 char *http_test_extract_json_string_alloc(const char *json, const char *key);
 char *http_test_json_escape_alloc(const char *src);
 char *http_test_read_text_file_limit(const char *path, size_t limit, bool *too_large);
+bool http_test_resolve_md_path(const char *user_path, char *out, size_t out_max);
 
 TEST_INIT()
 
@@ -69,9 +70,23 @@ static bool test_large_file_read_is_not_truncated(void) {
     return true;
 }
 
+static bool test_resolve_md_path_windows_drive(void) {
+    char out[256];
+    ASSERT_FALSE(http_test_resolve_md_path("C:\\evil\\path.md", out, sizeof(out)));
+    ASSERT_FALSE(http_test_resolve_md_path("d:/evil/path.md", out, sizeof(out)));
+    ASSERT_FALSE(http_test_resolve_md_path("Z:\\another.markdown", out, sizeof(out)));
+    
+    ASSERT_TRUE(http_test_resolve_md_path("notes.md", out, sizeof(out)));
+    ASSERT_STR_EQ(out, "notes.md");
+    ASSERT_TRUE(http_test_resolve_md_path("subdir/file.markdown", out, sizeof(out)));
+    ASSERT_STR_EQ(out, "subdir/file.markdown");
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_large_json_round_trip);
     RUN_TEST(test_large_file_read_is_not_truncated);
+    RUN_TEST(test_resolve_md_path_windows_drive);
     printf("\nTest Summary: %d run, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
 }

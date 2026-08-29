@@ -118,6 +118,16 @@ bool test_blockquote_multiline(void) {
     return true;
 }
 
+bool test_blockquote_empty(void) {
+    const char *html = "<blockquote><p></p></blockquote><p>s</p>";
+    html_serialize_result_t res = html_to_md(html, strlen(html));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.markdown);
+    ASSERT_STR_EQ(res.markdown, ">\n\ns\n\n");
+    html_serialize_result_free(&res);
+    return true;
+}
+
 bool test_link(void) {
     const char *html = "<a href=\"https://example.com\">link text</a>";
     html_serialize_result_t res = html_to_md(html, strlen(html));
@@ -312,6 +322,7 @@ int main(void) {
     RUN_TEST(test_ordered_list_renumbering);
     RUN_TEST(test_blockquote);
     RUN_TEST(test_blockquote_multiline);
+    RUN_TEST(test_blockquote_empty);
     RUN_TEST(test_link);
     RUN_TEST(test_image);
     RUN_TEST(test_horizontal_rule);

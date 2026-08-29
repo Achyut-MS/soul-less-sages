@@ -822,19 +822,23 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             size_t slen = quote_buf->len;
             size_t line_start = 0;
 
-            while (line_start < slen) {
-                size_t line_end = line_start;
-                while (line_end < slen && src[line_end] != '\n') line_end++;
+            if (slen == 0) {
+                ser_builder_append(out, ">\n");
+            } else {
+                while (line_start < slen) {
+                    size_t line_end = line_start;
+                    while (line_end < slen && src[line_end] != '\n') line_end++;
 
-                size_t cur_len = line_end - line_start;
-                if (cur_len > 0) {
-                    ser_builder_append(out, "> ");
-                    ser_builder_append_len(out, src + line_start, cur_len);
-                    ser_builder_append_char(out, '\n');
-                } else {
-                    ser_builder_append(out, ">\n");
+                    size_t cur_len = line_end - line_start;
+                    if (cur_len > 0) {
+                        ser_builder_append(out, "> ");
+                        ser_builder_append_len(out, src + line_start, cur_len);
+                        ser_builder_append_char(out, '\n');
+                    } else {
+                        ser_builder_append(out, ">\n");
+                    }
+                    line_start = (line_end < slen) ? line_end + 1 : slen;
                 }
-                line_start = (line_end < slen) ? line_end + 1 : slen;
             }
             ser_builder_append_char(out, '\n');
             ser_builder_free(quote_buf);

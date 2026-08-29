@@ -20,7 +20,7 @@ A zero-dependency desktop Markdown editor with **bidirectional sync**: edit the 
 | Depends on `marked`, `turndown`, `express`, `ws` | **Zero dependencies** — hand-rolled parsers & socket engine |
 | Silent failure on bad syntax | **Compiler-style error reporting** — caret-annotated `line 14, col 3: unterminated code fence` |
 | Read-only preview | **Contenteditable preview** that serializes back to Markdown |
-| "We wrote tests" | 25.61% CommonMark conformance, fuzz-tested round-trip fixed point, gcov coverage % |
+| "We wrote tests" | 27.15% CommonMark conformance, fuzz-tested round-trip fixed point, 75-94% gcov coverage (core logic) |
 
 ---
 
@@ -193,7 +193,7 @@ MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 
 | Claim | Evidence |
 |---|---|
-| Parser is spec-aligned | CommonMark `spec.json` conformance run — 167/652 tests passed (25.61%) (reported in `STDLIB.md`) |
+| Parser is spec-aligned | CommonMark `spec.json` conformance run — 177/652 tests passed (27.15%) (reported in `STDLIB.md`) |
 | Bidirectional sync actually converges | Fuzzer asserts `render(html_to_md(md_to_html(x)))` is a fixed point after one round trip |
 | No memory bugs | Valgrind clean + ASan/UBSan build clean across fuzz corpus |
 | Test depth | gcov line coverage % reported alongside raw test count |

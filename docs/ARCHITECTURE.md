@@ -222,7 +222,7 @@ tokenizer_next() → token
 ## Correctness Harness
 
 ### CommonMark Conformance Runner
-`tests/commonmark/spec.json` (the official CommonMark test suite) is loaded by a runner that feeds each input through `md_to_html()` and diffs against expected output. Since our grammar is intentionally scoped smaller for the hackathon (excluding footnotes, setext headings, HTML blocks, block quotes, etc., though simple GFM tables are supported), many advanced/nested tests fail. The runner reports the actual conformance ratio (167/652 passed, 25.61%), which is documented in [STDLIB.md](STDLIB.md) and the README.
+`tests/commonmark/spec.json` (the official CommonMark test suite) is loaded by a runner that feeds each input through `md_to_html()` and diffs against expected output. Since our grammar is intentionally scoped smaller for the hackathon (excluding footnotes, HTML blocks, etc., though simple GFM tables, blockquotes, and lists are supported), many advanced/nested tests fail. The runner reports the actual conformance ratio (177/652 passed, 27.15%), which is documented in [STDLIB.md](STDLIB.md) and the README.
 
 ### Round-Trip Fixed-Point Fuzzer
 `tests/fuzz_roundtrip.c` generates randomized (byte-mutation and grammar-aware) Markdown inputs and asserts:

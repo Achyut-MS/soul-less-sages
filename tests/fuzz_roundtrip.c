@@ -161,6 +161,11 @@ int main(void) {
             fprintf(stderr, "  Input:    [%.*s]\n", (int)(mut_len > 80 ? 80 : mut_len), mutated);
             fprintf(stderr, "  Pass 1:   [%.80s]\n", r1.html);
             fprintf(stderr, "  Pass 2:   [%.80s]\n", r3.html);
+            fprintf(stderr, "  Pass 1 hex: ");
+            for (size_t k = 0; r1.html[k] != '\0' && k < 120; k++) fprintf(stderr, "%02X ", (unsigned char)r1.html[k]);
+            fprintf(stderr, "\n  Pass 2 hex: ");
+            for (size_t k = 0; r3.html[k] != '\0' && k < 120; k++) fprintf(stderr, "%02X ", (unsigned char)r3.html[k]);
+            fprintf(stderr, "\n");
             failures++;
         }
 

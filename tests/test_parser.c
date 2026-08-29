@@ -85,6 +85,17 @@ bool test_parser_blockquote(void) {
     return true;
 }
 
+bool test_parser_blockquote_empty(void) {
+    const char *md = ">\n\ns\n\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<blockquote>\n<p></p>\n</blockquote>\n") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<p>s</p>\n") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
 bool test_parser_link(void) {
     const char *md = "Check [Google](https://google.com) now.";
     md_parse_result_t res = md_to_html(md, strlen(md));
@@ -142,6 +153,16 @@ bool test_parser_table(void) {
     return true;
 }
 
+bool test_parser_errors(void) {
+    const char *bad = "[Google(https://google.com)";
+    md_parse_result_t bad_res = md_to_html(bad, strlen(bad));
+    ASSERT_TRUE(!bad_res.success);
+    ASSERT_NOT_NULL(bad_res.error_msg);
+    ASSERT_TRUE(strstr(bad_res.error_msg, "expected ']'") != NULL);
+    md_parse_result_free(&bad_res);
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_parser_headings);
     RUN_TEST(test_parser_bold_and_italic);
@@ -150,11 +171,13 @@ int main(void) {
     RUN_TEST(test_parser_unordered_list);
     RUN_TEST(test_parser_ordered_list);
     RUN_TEST(test_parser_blockquote);
+    RUN_TEST(test_parser_blockquote_empty);
     RUN_TEST(test_parser_link);
     RUN_TEST(test_parser_image);
     RUN_TEST(test_parser_horizontal_rule);
     RUN_TEST(test_parser_table);
     RUN_TEST(test_parser_empty_input);
+    RUN_TEST(test_parser_errors);
     printf("\nTest Summary: %d run, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
 }
