@@ -30,7 +30,7 @@
 #define ASSERT_TRUE(expr) \
     do { \
         if (!(expr)) { \
-            fprintf(stderr, "\n  %s:%d: Assertion failed: " #expr "\n", __FILE__, __LINE__); \
+            fprintf(stderr, "\n  %s:%d: Assertion failed: %s\n", __FILE__, __LINE__, #expr); \
             return false; \
         } \
     } while (0)
@@ -38,7 +38,7 @@
 #define ASSERT_FALSE(expr) \
     do { \
         if (expr) { \
-            fprintf(stderr, "\n  %s:%d: Assertion failed: !" #expr "\n", __FILE__, __LINE__); \
+            fprintf(stderr, "\n  %s:%d: Assertion failed: !(%s)\n", __FILE__, __LINE__, #expr); \
             return false; \
         } \
     } while (0)
@@ -70,7 +70,15 @@
 #define ASSERT_NOT_NULL(ptr) \
     do { \
         if ((ptr) == NULL) { \
-            fprintf(stderr, "\n  %s:%d: Assertion failed: " #ptr " is NULL\n", __FILE__, __LINE__); \
+            fprintf(stderr, "\n  %s:%d: Assertion failed: %s is NULL\n", __FILE__, __LINE__, #ptr); \
+            return false; \
+        } \
+    } while (0)
+
+#define ASSERT_NULL(ptr) \
+    do { \
+        if ((ptr) != NULL) { \
+            fprintf(stderr, "\n  %s:%d: Assertion failed: %s is not NULL\n", __FILE__, __LINE__, #ptr); \
             return false; \
         } \
     } while (0)

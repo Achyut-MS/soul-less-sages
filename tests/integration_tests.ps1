@@ -148,6 +148,36 @@ if (-not $serverProcess.HasExited) {
     Stop-Process -Id $serverProcess.Id -Force
 }
 
+# Test 9: CLI -h help display
+Write-Host -NoNewline "Test 9: CLI -h flag ... "
+try {
+    $helpOut = & ./mdview.exe -h 2>&1
+    if ($helpOut -match "Usage:") {
+        Write-Host "PASSED" -ForegroundColor Green
+    } else {
+        Write-Host "FAILED" -ForegroundColor Red
+        $failed++
+    }
+} catch {
+    Write-Host "FAILED ($_)" -ForegroundColor Red
+    $failed++
+}
+
+# Test 10: CLI invalid flag error handling
+Write-Host -NoNewline "Test 10: CLI invalid flag ... "
+try {
+    $invalidOut = & ./mdview.exe -z 2>&1
+    if ($invalidOut -match "Usage:") {
+        Write-Host "PASSED" -ForegroundColor Green
+    } else {
+        Write-Host "FAILED" -ForegroundColor Red
+        $failed++
+    }
+} catch {
+    Write-Host "FAILED ($_)" -ForegroundColor Red
+    $failed++
+}
+
 if ($failed -eq 0) {
     Write-Host "All integration tests passed successfully!" -ForegroundColor Green
     exit 0

@@ -51,6 +51,8 @@ platform_socket_t g_server_fd = PLATFORM_INVALID_SOCKET;
 static char g_initial_file[512] = {0};
 
 static bool resolve_md_path(const char *user_path, char *out, size_t out_max);
+static void url_decode(const char *src, char *out, size_t out_max);
+static bool get_query_param(const char *path, const char *key, char *out, size_t out_max);
 
 #define HTTP_HEADER_LIMIT 65536u
 #define HTTP_BODY_LIMIT (8u * 1024u * 1024u)
@@ -173,7 +175,7 @@ static bool extract_json_string(const char *json, const char *key, char *out, si
     return false;
 }
 
-static bool append_char(char **buf, size_t *len, size_t *cap, char c) {
+static bool json_append_char(char **buf, size_t *len, size_t *cap, char c) {
     if (*len + 1 >= *cap) {
         size_t new_cap = (*cap < 1024) ? 1024 : (*cap * 2);
         char *new_buf = realloc(*buf, new_cap);
@@ -209,7 +211,7 @@ static char *extract_json_string_alloc(const char *json, const char *key) {
 
     while (*p) {
         if (*p == '"') {
-            if (!append_char(&out, &len, &cap, '\0')) {
+            if (!json_append_char(&out, &len, &cap, '\0')) {
                 free(out);
                 return NULL;
             }
@@ -219,23 +221,23 @@ static char *extract_json_string_alloc(const char *json, const char *key) {
             p++;
             if (!*p) break;
             switch (*p) {
-                case '"':  if (!append_char(&out, &len, &cap, '"')) goto fail; break;
-                case '\\': if (!append_char(&out, &len, &cap, '\\')) goto fail; break;
-                case '/':  if (!append_char(&out, &len, &cap, '/')) goto fail; break;
-                case 'b':  if (!append_char(&out, &len, &cap, '\b')) goto fail; break;
-                case 'f':  if (!append_char(&out, &len, &cap, '\f')) goto fail; break;
-                case 'n':  if (!append_char(&out, &len, &cap, '\n')) goto fail; break;
-                case 'r':  if (!append_char(&out, &len, &cap, '\r')) goto fail; break;
-                case 't':  if (!append_char(&out, &len, &cap, '\t')) goto fail; break;
+                case '"':  if (!json_append_char(&out, &len, &cap, '"')) goto fail; break;
+                case '\\': if (!json_append_char(&out, &len, &cap, '\\')) goto fail; break;
+                case '/':  if (!json_append_char(&out, &len, &cap, '/')) goto fail; break;
+                case 'b':  if (!json_append_char(&out, &len, &cap, '\b')) goto fail; break;
+                case 'f':  if (!json_append_char(&out, &len, &cap, '\f')) goto fail; break;
+                case 'n':  if (!json_append_char(&out, &len, &cap, '\n')) goto fail; break;
+                case 'r':  if (!json_append_char(&out, &len, &cap, '\r')) goto fail; break;
+                case 't':  if (!json_append_char(&out, &len, &cap, '\t')) goto fail; break;
                 case 'u':
                     if (strlen(p) >= 5) p += 4;
                     break;
                 default:
-                    if (!append_char(&out, &len, &cap, *p)) goto fail;
+                    if (!json_append_char(&out, &len, &cap, *p)) goto fail;
                     break;
             }
         } else {
-            if (!append_char(&out, &len, &cap, *p)) goto fail;
+            if (!json_append_char(&out, &len, &cap, *p)) goto fail;
         }
         p++;
     }
@@ -298,26 +300,26 @@ static char *json_escape_alloc(const char *src) {
     for (size_t i = 0; src[i] != '\0'; i++) {
         switch (src[i]) {
             case '"':
-                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, '"')) goto fail;
+                if (!json_append_char(&out, &len, &cap, '\\') || !json_append_char(&out, &len, &cap, '"')) goto fail;
                 break;
             case '\\':
-                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, '\\')) goto fail;
+                if (!json_append_char(&out, &len, &cap, '\\') || !json_append_char(&out, &len, &cap, '\\')) goto fail;
                 break;
             case '\n':
-                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 'n')) goto fail;
+                if (!json_append_char(&out, &len, &cap, '\\') || !json_append_char(&out, &len, &cap, 'n')) goto fail;
                 break;
             case '\r':
-                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 'r')) goto fail;
+                if (!json_append_char(&out, &len, &cap, '\\') || !json_append_char(&out, &len, &cap, 'r')) goto fail;
                 break;
             case '\t':
-                if (!append_char(&out, &len, &cap, '\\') || !append_char(&out, &len, &cap, 't')) goto fail;
+                if (!json_append_char(&out, &len, &cap, '\\') || !json_append_char(&out, &len, &cap, 't')) goto fail;
                 break;
             default:
-                if ((unsigned char)src[i] >= 32 && !append_char(&out, &len, &cap, src[i])) goto fail;
+                if ((unsigned char)src[i] >= 32 && !json_append_char(&out, &len, &cap, src[i])) goto fail;
                 break;
         }
     }
-    if (!append_char(&out, &len, &cap, '\0')) goto fail;
+    if (!json_append_char(&out, &len, &cap, '\0')) goto fail;
     return out;
 
 fail:
@@ -365,12 +367,28 @@ static char *read_text_file_limit(const char *path, size_t limit, bool *too_larg
 }
 
 #ifdef TEST_MODE
+bool http_test_extract_json_string(const char *json, const char *key, char *out, size_t out_max) {
+    return extract_json_string(json, key, out, out_max);
+}
+
 char *http_test_extract_json_string_alloc(const char *json, const char *key) {
     return extract_json_string_alloc(json, key);
 }
 
+void http_test_json_escape(const char *src, char *dest, size_t dest_max) {
+    json_escape(src, dest, dest_max);
+}
+
 char *http_test_json_escape_alloc(const char *src) {
     return json_escape_alloc(src);
+}
+
+void http_test_url_decode(const char *src, char *out, size_t out_max) {
+    url_decode(src, out, out_max);
+}
+
+bool http_test_get_query_param(const char *path, const char *key, char *out, size_t out_max) {
+    return get_query_param(path, key, out, out_max);
 }
 
 char *http_test_read_text_file_limit(const char *path, size_t limit, bool *too_large) {
@@ -1052,6 +1070,20 @@ static void process_client(platform_socket_t client_fd) {
 
     free(req_buf);
 }
+
+#ifdef TEST_MODE
+void http_test_process_client(platform_socket_t client_fd) {
+    process_client(client_fd);
+}
+
+void http_test_set_initial_file(const char *file) {
+    if (file) {
+        (void)snprintf(g_initial_file, sizeof(g_initial_file), "%s", file);
+    } else {
+        g_initial_file[0] = '\0';
+    }
+}
+#endif
 
 bool http_server_run(int port, const char *initial_file) {
     if (initial_file) {

@@ -222,7 +222,7 @@ tokenizer_next() → token
 ## Correctness Harness
 
 ### CommonMark Conformance Runner
-`tests/commonmark/spec.json` (the official CommonMark test suite) is loaded by a runner that feeds each input through `md_to_html()` and diffs against expected output. Since our grammar is intentionally scoped smaller for the hackathon (excluding footnotes, HTML blocks, etc., though simple GFM tables, blockquotes, and lists are supported), many advanced/nested tests fail. The runner reports the actual conformance ratio (177/652 passed, 27.15%), which is documented in [STDLIB.md](STDLIB.md) and the README.
+`tests/commonmark/spec.json` (the official CommonMark test suite) is loaded by a runner that feeds each input through `md_to_html()` and diffs against expected output. Since our grammar is intentionally scoped smaller for the hackathon (excluding footnotes, HTML blocks, etc., though simple GFM tables, blockquotes, and lists are supported), many advanced/nested tests fail. The runner reports the actual conformance ratio (190/652 passed, 29.14%), which is documented in [STDLIB.md](STDLIB.md) and the README.
 
 ### Round-Trip Fixed-Point Fuzzer
 `tests/fuzz_roundtrip.c` generates randomized (byte-mutation and grammar-aware) Markdown inputs and asserts:
@@ -232,10 +232,10 @@ render(html_to_md(md_to_html(x))) == render(md_to_html(x))
 i.e., after one full round trip through both directions, a second round trip is a no-op. This is the concrete proof behind the "bidirectional sync actually converges" claim, not just a demo. Runs for a fixed time budget (default: 5 minutes) as part of `make test`, longer overnight as a background CI-style run if time allows.
 
 ### Sanitizer Builds
-In addition to the Valgrind-clean requirement (SKILLS.md §5), a second build target compiles with `-fsanitize=address,undefined` and runs the fuzzer + full test suite against it. Zero ASan/UBSan findings across the fuzz corpus is reported alongside the Valgrind result.
+The `make asan` target compiles with `-fsanitize=address,undefined` and runs the test suite plus a fuzz smoke test when the host compiler has ASan/UBSan runtimes installed. Valgrind is treated as an optional external audit unless a fresh log is submitted with the repo.
 
 ### Coverage
-`gcov`/`lcov` line coverage percentage is captured from a full test run and reported in the README next to the raw test count (e.g., "62 tests, 94% line coverage") rather than the count alone.
+`gcov`/`lcov` line coverage is captured from a full test run and reported in the README per core file rather than collapsed into a cherry-picked aggregate. All core engine and network components (`file_writer.c`, `html_serializer.c`, `http.c`, `md_parser.c`) achieve 80–94% coverage, while platform OS and CLI entry points reach ~69%.
 
 ---
 

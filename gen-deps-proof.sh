@@ -92,6 +92,33 @@ while IFS= read -r file; do
     fi
 done < <(find . -type f \( -name "*.c" -o -name "*.h" -o -name "*.js" -o -name "*.html" \) | sort)
 
+echo "" >> "$OUTPUT"
+echo "Runtime Shell-Out Audit:" >> "$OUTPUT"
+while IFS= read -r hit; do
+    file=${hit%%:*}
+    rest=${hit#*:}
+    line_no=${rest%%:*}
+    code=${rest#*:}
+
+    if [[ "$file" == tests/* || "$file" == ./tests/* ]]; then
+        echo "  TEST-ONLY: $file:$line_no: $code" >> "$OUTPUT"
+        continue
+    fi
+
+    if [[ "$file" == "src-c/platform.c" || "$file" == "./src-c/platform.c" ]] && [[ "$code" == *"execvp(\"xdg-open\""* ]]; then
+        echo "  DISCLOSED OPTIONAL DESKTOP LAUNCH: $file:$line_no: $code" >> "$OUTPUT"
+        echo "    The core server prints a manual URL fallback if xdg-open cannot run." >> "$OUTPUT"
+        continue
+    fi
+
+    if [[ "$file" == "src-c/platform.c" || "$file" == "./src-c/platform.c" ]] && [[ "$code" == *"ShellExecuteA"* ]]; then
+        echo "  DISCLOSED OS URL HANDLER: $file:$line_no: $code" >> "$OUTPUT"
+        continue
+    fi
+
+    record_violation "Undisclosed runtime shell-out in $file:$line_no: $code"
+done < <(grep -RInE '(^|[^A-Za-z0-9_])(system|popen|execv|execl|execvp|ShellExecuteA|CreateProcessA)[[:space:]]*\(' src-c tests --include='*.c' --include='*.h' || true)
+
 if [[ "$VIOLATIONS" -eq 0 ]]; then
     echo "SUCCESS: 0 violations. Zero third-party runtime dependencies detected." >> "$OUTPUT"
     echo "Scan complete: 0 violations. Proof generated in $OUTPUT."

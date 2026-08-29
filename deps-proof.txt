@@ -1,38 +1,42 @@
-﻿=== Zero-Dependency Dependency Proof ===
-Generated at: 2026-08-29 19:50:17
+=== Zero-Dependency Dependency Proof ===
+Generated at: Sun Aug 30 12:28:00 AM IST 2026
 
 Package Manifest Presence Audit:
   package.json / Cargo.toml / go.mod / requirements.txt: absent or empty for this C project
 
 Files scanned:
-  - .\launcher.c
-  - .\src-c\error_report.c
-  - .\src-c\error_report.h
-  - .\src-c\file_writer.c
-  - .\src-c\file_writer.h
-  - .\src-c\html_serializer.c
-  - .\src-c\html_serializer.h
-  - .\src-c\http.c
-  - .\src-c\http.h
-  - .\src-c\main.c
-  - .\src-c\md_parser.c
-  - .\src-c\md_parser.h
-  - .\src-c\mdview_single.c
-  - .\src-c\platform.c
-  - .\src-c\platform.h
-  - .\src-c\static\client.js
-  - .\src-c\static\index.html
-  - .\src-c\tokenizer.c
-  - .\src-c\tokenizer.h
-  - .\tests\commonmark\run_conformance.c
-  - .\tests\fuzz_roundtrip.c
-  - .\tests\test_file_writer.c
-  - .\tests\test_harness.h
-  - .\tests\test_html_serializer.c
-  - .\tests\test_http.c
-  - .\tests\test_md_parser.c
-  - .\tests\test_parser.c
-  - .\tests\test_platform.c
+  - ./src-c/error_report.c
+  - ./src-c/error_report.h
+  - ./src-c/file_writer.c
+  - ./src-c/file_writer.h
+  - ./src-c/html_serializer.c
+  - ./src-c/html_serializer.h
+  - ./src-c/http.c
+  - ./src-c/http.h
+  - ./src-c/main.c
+  - ./src-c/md_parser.c
+  - ./src-c/md_parser.h
+  - ./src-c/mdview_single.c
+  - ./src-c/platform.c
+  - ./src-c/platform.h
+  - ./src-c/static/client.js
+  - ./src-c/static/index.html
+  - ./src-c/tokenizer.c
+  - ./src-c/tokenizer.h
+  - ./tests/commonmark/run_conformance.c
+  - ./tests/fuzz_roundtrip.c
+  - ./tests/test_file_writer.c
+  - ./tests/test_harness.h
+  - ./tests/test_html_serializer.c
+  - ./tests/test_http.c
+  - ./tests/test_parser.c
+  - ./tests/test_platform.c
 
 Violation Audit:
+
+Runtime Shell-Out Audit:
+  DISCLOSED OS URL HANDLER: src-c/platform.c:177:     INT_PTR res = (INT_PTR)ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+  DISCLOSED OPTIONAL DESKTOP LAUNCH: src-c/platform.c:190:         (void)execvp("xdg-open", args);
+    The core server prints a manual URL fallback if xdg-open cannot run.
+  TEST-ONLY: tests/test_file_writer.c:109:     int status = system(cmd);
 SUCCESS: 0 violations. Zero third-party runtime dependencies detected.

@@ -144,7 +144,7 @@ Per hackathon rules ([zerodepshack.com/#rules](https://zerodepshack.com/#rules))
 
 ### CommonMark Conformance Results
 Running the real, unmodified CommonMark `spec.json` (0.31.2) against our C23 markdown parser yields the following real-world results:
-- **CommonMark Conformance Ratio:** `177/652 passed (27.15%)`
+- **CommonMark Conformance Ratio:** `190/652 passed (29.14%)`
 
 #### Section Breakdown:
 * **Blank lines:** 1/1 passed (100.00%)
@@ -167,12 +167,12 @@ Running the real, unmodified CommonMark `spec.json` (0.31.2) against our C23 mar
 * **List items:** 6/48 passed (12.50%)
 * **Lists:** 3/26 passed (11.54%)
 * **Entity and numeric character references:** 4/17 passed (23.53%)
-* **Images:** 2/22 passed (9.09%)
+* **Images:** 3/22 passed (13.64%)
 * **Indented code blocks:** 1/12 passed (8.33%)
-* **Links:** 7/90 passed (7.78%)
+* **Links:** 15/90 passed (16.67%)
 * **Block quotes:** 8/25 passed (32.00%)
 * **HTML blocks:** 0/44 passed (0.00%)
-* **Link reference definitions:** 0/27 passed (0.00%)
+* **Link reference definitions:** 4/27 passed (14.81%)
 
 #### Honest Limitations:
 The parser conforms strictly to standard subset rendering. Complex block quotes, nested links/HTML blocks, and non-flat list styles are outside of the v1 editor companion scope.

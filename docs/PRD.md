@@ -230,7 +230,7 @@ Error (400 Bad Request) — malformed/unparseable fragment:
 - **XSS prevention**: HTML-escape all text content in renderer
 - **No arbitrary file access**: static file serving restricted to `static/` directory
 - **No shell injection**: file paths sanitized, no `system()` calls
-- **Memory safety**: Valgrind clean AND ASan/UBSan clean across the fuzz corpus (G10)
+- **Memory safety**: ASan/UBSan clean across the automated test and fuzz smoke targets; Valgrind is a recommended external audit, not a submitted proof unless a fresh log is included (G10)
 
 ### 5.4 Portability
 - **Target OS**: Linux (primary), macOS (secondary)

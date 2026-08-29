@@ -1234,7 +1234,7 @@ Before pushing to GitHub at **Hour 72** (code freeze):
 2. **Hour 24:** 15+ tests passing, serializer basic functionality
 3. **Hour 36:** Malformed HTML handling complete, context-aware escaping
 4. **Hour 48:** Full round-trip converging, fuzzer running
-5. **Hour 56:** ASan/Valgrind clean, coverage ≥85%
+5. **Hour 56:** ASan/UBSan clean on a host with sanitizer runtimes installed; Valgrind log optional; coverage reported per file
 6. **Hour 64:** Gate check (pass → stretch goal; fail → doc phase)
 7. **Hour 70:** Demo script finalized, STDLIB.md done
 

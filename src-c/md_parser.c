@@ -163,6 +163,10 @@ static void parser_set_error(parser_state_t *st, const char *src, size_t offset,
         return;
     }
     st->has_error = true;
+    if (st->error_msg) {
+        free(st->error_msg);
+        st->error_msg = NULL;
+    }
     st->error_msg = xstrdup(message);
     compute_line_col(src, offset, &st->error_line, &st->error_col);
     st->error_line = st->error_line ? st->error_line : 1;
@@ -375,52 +379,40 @@ static char *render_inline_fragment(const char *text, const char *src, size_t ba
                     break;
                 }
             }
-            if (close_bracket == SIZE_MAX) {
-                parser_set_error(st, src, base_offset + i, "expected ']' after link text");
-                free(out);
-                return NULL;
-            }
-            if (close_bracket + 1 >= len || text[close_bracket + 1] != '(') {
-                parser_set_error(st, src, base_offset + i, "expected '(' after link text");
-                free(out);
-                return NULL;
-            }
-            size_t close_paren = SIZE_MAX;
-            for (size_t j = close_bracket + 2; j < len; ++j) {
-                if (text[j] == ')') {
-                    close_paren = j;
-                    break;
+            if (close_bracket != SIZE_MAX && close_bracket + 1 < len && text[close_bracket + 1] == '(') {
+                size_t close_paren = SIZE_MAX;
+                for (size_t j = close_bracket + 2; j < len; ++j) {
+                    if (text[j] == ')') {
+                        close_paren = j;
+                        break;
+                    }
+                }
+                if (close_paren != SIZE_MAX) {
+                    size_t label_len = close_bracket - (i + 1);
+                    size_t url_len = close_paren - (close_bracket + 2);
+                    char *label = xstrdup_len(text + i + 1, label_len);
+                    char *url = xstrdup_len(text + close_bracket + 2, url_len);
+                    char *label_html = render_inline_fragment(label, src, base_offset + i + 1, st);
+                    free(label);
+                    if (!label_html) {
+                        free(url);
+                        free(out);
+                        return NULL;
+                    }
+                    char *href = xstrdup("");
+                    escape_html_append(&href, url);
+                    free(url);
+                    append_str(&out, "<a href=\"");
+                    append_str(&out, href);
+                    append_str(&out, "\">");
+                    append_str(&out, label_html);
+                    append_str(&out, "</a>");
+                    free(href);
+                    free(label_html);
+                    i = close_paren + 1;
+                    continue;
                 }
             }
-            if (close_paren == SIZE_MAX) {
-                parser_set_error(st, src, base_offset + i, "expected ')' after link target");
-                free(out);
-                return NULL;
-            }
-
-            size_t label_len = close_bracket - (i + 1);
-            size_t url_len = close_paren - (close_bracket + 2);
-            char *label = xstrdup_len(text + i + 1, label_len);
-            char *url = xstrdup_len(text + close_bracket + 2, url_len);
-            char *label_html = render_inline_fragment(label, src, base_offset + i + 1, st);
-            free(label);
-            if (!label_html) {
-                free(url);
-                free(out);
-                return NULL;
-            }
-            char *href = xstrdup("");
-            escape_html_append(&href, url);
-            free(url);
-            append_str(&out, "<a href=\"");
-            append_str(&out, href);
-            append_str(&out, "\">");
-            append_str(&out, label_html);
-            append_str(&out, "</a>");
-            free(href);
-            free(label_html);
-            i = close_paren + 1;
-            continue;
         }
 
         char buf[2];
@@ -866,8 +858,7 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
         }
 
         bool ordered = false;
-        char *list_item = NULL;
-        if (match_list_item(line, &ordered, &list_item)) {
+        if (match_list_item(line, &ordered, NULL)) {
             append_str(&html, ordered ? "<ol>\n" : "<ul>\n");
             while (i < count) {
                 bool item_ordered = false;
@@ -882,7 +873,6 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 char *formatted = render_inline_and_check(item_text, src, lines[i].offset, st);
                 if (!formatted) {
                     free(item_text);
-                    free(list_item);
                     free_lines(lines, count);
                     free(html);
                     return NULL;
@@ -895,7 +885,6 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 i += 1;
             }
             append_str(&html, ordered ? "</ol>\n" : "</ul>\n");
-            free(list_item);
             continue;
         }
 
@@ -1014,13 +1003,19 @@ md_parse_result_t md_to_html(const char *md_src, size_t md_len) {
 
     if (st.has_error) {
         result.success = false;
-        result.error_msg = st.error_msg ? xstrdup(st.error_msg) : xstrdup("parse error");
+        result.error_msg = st.error_msg ? st.error_msg : xstrdup("parse error");
         result.line = st.error_line;
         result.col = st.error_col;
         result.caret_snippet = error_report_create(source, result.line, result.col, result.error_msg);
-        free(st.error_msg);
+        st.error_msg = NULL;
+        free(st.html);
         free(source);
         return result;
+    }
+
+    if (st.error_msg) {
+        free(st.error_msg);
+        st.error_msg = NULL;
     }
 
     if (!st.html) {

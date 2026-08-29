@@ -113,8 +113,29 @@ fi
 echo "=== Tearing down server ==="
 curl -s -X POST "$URL/shutdown" >/dev/null 2>&1 || true
 sleep 1
-if kill -0 "$SERVER_PID" >/dev/null 2>&1; then
-    kill -9 "$SERVER_PID" || true
+if kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill -9 "$SERVER_PID" 2>/dev/null || true
+fi
+wait "$SERVER_PID" 2>/dev/null || true
+
+# Test 9: CLI -h help display
+echo -n "Test 9: CLI -h flag ... "
+HELP_OUT=$(./mdview -h 2>&1 || true)
+if echo "$HELP_OUT" | grep -q "Usage:"; then
+    echo "PASSED"
+else
+    echo "FAILED"
+    FAILED=$((FAILED+1))
+fi
+
+# Test 10: CLI invalid flag error handling
+echo -n "Test 10: CLI invalid flag ... "
+INVALID_OUT=$(./mdview -z 2>&1 || true)
+if echo "$INVALID_OUT" | grep -q "Usage:"; then
+    echo "PASSED"
+else
+    echo "FAILED"
+    FAILED=$((FAILED+1))
 fi
 
 if [ "$FAILED" -eq 0 ]; then

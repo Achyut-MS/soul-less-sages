@@ -20,7 +20,7 @@ A zero-dependency desktop Markdown editor with **bidirectional sync**: edit the 
 | Depends on `marked`, `turndown`, `express`, `ws` | **Zero dependencies** — hand-rolled parsers & socket engine |
 | Silent failure on bad syntax | **Compiler-style error reporting** — caret-annotated `line 14, col 3: unterminated code fence` |
 | Read-only preview | **Contenteditable preview** that serializes back to Markdown |
-| "We wrote tests" | 27.15% CommonMark conformance, fuzz-tested round-trip fixed point, 75-94% gcov coverage (core logic) |
+| "We wrote tests" | 29.14% CommonMark conformance, fuzz-tested round-trip fixed point, gcov coverage reported per core file |
 
 ---
 
@@ -50,7 +50,7 @@ cd src-c; mingw32-make single; .\mdview_single.exe .\notes.md
 
 ## Language & Platform Decision
 
-**Decision: C (C23) with cross-platform Win32 & POSIX abstraction (`platform.h`), confirmed.** No C++, no Electron, and no third-party desktop wrappers. Sockets use POSIX `<sys/socket.h>` on Linux and Winsock2 `<winsock2.h>` on Windows. Atomic writes use `rename()`/`fsync()` on Linux and `MoveFileExA()`/`FlushFileBuffers()` on Windows. Desktop launch invokes `fork()` + `execvp("xdg-open", ...)` on Linux and `ShellExecuteA()` on Windows with manual console fallback. Manual memory management and Valgrind/ASan-clean discipline are maintained across both platforms.
+**Decision: C (C23) with cross-platform Win32 & POSIX abstraction (`platform.h`), confirmed.** No C++, no Electron, and no third-party desktop wrappers. Sockets use POSIX `<sys/socket.h>` on Linux and Winsock2 `<winsock2.h>` on Windows. Atomic writes use `rename()`/`fsync()` on Linux and `MoveFileExA()`/`FlushFileBuffers()` on Windows. Desktop launch invokes `fork()` + `execvp("xdg-open", ...)` on Linux and `ShellExecuteA()` on Windows with manual console fallback. ASan/UBSan is covered by the `make asan` target.
 
 | Criterion | C |
 |---|---|
@@ -151,8 +151,8 @@ ZeroDependency/
 └── tests/
     ├── test_harness.h       # hand-rolled test macros (no Unity/GoogleTest)
     ├── test_parser.c        # md_parser unit tests
-    ├── test_md_parser.c     # extended md_parser tests (tokenizer + error_report)
     ├── test_html_serializer.c
+    ├── test_http.c          # HTTP routing and payload edge cases
     ├── test_platform.c      # socket lifecycle, atomic write, browser fallback
     ├── test_file_writer.c   # debounce collapse, atomicity crash, error path
     ├── fuzz_roundtrip.c     # 5-minute time-budgeted round-trip fixed-point fuzzer
@@ -193,10 +193,10 @@ MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 
 | Claim | Evidence |
 |---|---|
-| Parser is spec-aligned | CommonMark `spec.json` conformance run — 177/652 tests passed (27.15%) (reported in `STDLIB.md`) |
+| Parser is spec-aligned | CommonMark `spec.json` conformance run — 190/652 tests passed (29.14%) (reported in `STDLIB.md`) |
 | Bidirectional sync actually converges | Fuzzer asserts `render(html_to_md(md_to_html(x)))` is a fixed point after one round trip |
-| No memory bugs | Valgrind clean + ASan/UBSan build clean across fuzz corpus |
-| Test depth | gcov line coverage % reported alongside raw test count |
+| Sanitizer check | `make asan` builds with ASan/UBSan and runs parser, serializer, platform, writer, integration, and fuzz smoke tests |
+| Test depth | `make coverage` reports per-file gcov line coverage: `md_parser.c` 80.26%, `html_serializer.c` 82.73%, `platform.c` 68.97%, `file_writer.c` 93.75%, `http.c` 80.37%, `main.c` 69.44% |
 
 ---
 
@@ -214,7 +214,7 @@ MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 | Challenge | Difficulty | Pts | Fit for this project |
 |---|---|---|---|
 | **Package Killer** | Medium | +3 | **Selected** — 4-5 major package substitutions successfully completed and documented. |
-| **STDLIB Log** | Medium | +3 | **Selected** — Includes 13 detailed non-trivial stdlib package substitutions in [STDLIB.md](STDLIB.md). |
+| **STDLIB Log** | Medium | +3 | **Selected** — Includes 15 detailed non-trivial stdlib package substitutions in [STDLIB.md](STDLIB.md). |
 | Reproducible Build | Hard | +5 | Worth evaluating — build twice, byte-identical output, publish both hashes. |
 | Single File | Hard | +5 | No — `mdview_single.c` is provided as an amalgamated **Unity Build** (includes all modular `.c` files directly) for optimized compilation and binary size, but we do not claim the Single File bonus since we preserve a modular directory structure. |
 

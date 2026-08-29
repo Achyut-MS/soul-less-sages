@@ -3,11 +3,15 @@
 #include "../src-c/platform.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -151,6 +155,7 @@ bool test_platform_open_browser_fallback(void) {
     const char *capture_file = "test_browser_stdout.txt";
 
     (void)remove(capture_file);
+    fflush(stdout);
 
     pid_t test_pid = fork();
     if (test_pid < 0) {
@@ -180,7 +185,7 @@ bool test_platform_open_browser_fallback(void) {
         struct timespec ts = { .tv_sec = 0, .tv_nsec = 500000000 }; /* 500ms */
         (void)nanosleep(&ts, NULL);
 
-        _exit(0);
+        exit(0);
     }
 
     /* Parent: wait for the test child to finish */
@@ -217,10 +222,52 @@ bool test_platform_open_browser_fallback(void) {
 }
 #endif
 
+/*
+ * Unit Test 8: platform_accept with actual connecting client.
+ * Verifies that platform_accept returns a valid client socket handle.
+ */
+bool test_platform_blocking_accept(void) {
+    ASSERT_TRUE(platform_socket_init());
+
+    platform_socket_t server_fd = platform_bind_listen(0);
+    ASSERT_FALSE(server_fd == PLATFORM_INVALID_SOCKET);
+
+    struct sockaddr_in addr;
+#ifdef _WIN32
+    int addr_len = sizeof(addr);
+#else
+    socklen_t addr_len = sizeof(addr);
+#endif
+    ASSERT_TRUE(getsockname(server_fd, (struct sockaddr *)&addr, &addr_len) == 0);
+
+    platform_socket_t client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ASSERT_FALSE(client_fd == PLATFORM_INVALID_SOCKET);
+
+    int conn_res = connect(client_fd, (struct sockaddr *)&addr, sizeof(addr));
+    ASSERT_TRUE(conn_res == 0);
+
+    platform_socket_t accepted_fd = platform_accept(server_fd);
+    ASSERT_FALSE(accepted_fd == PLATFORM_INVALID_SOCKET);
+
+#ifdef _WIN32
+    closesocket(accepted_fd);
+    closesocket(client_fd);
+    closesocket(server_fd);
+#else
+    close(accepted_fd);
+    close(client_fd);
+    close(server_fd);
+#endif
+
+    platform_socket_cleanup();
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_platform_socket_lifecycle);
     RUN_TEST(test_platform_bind_listen);
     RUN_TEST(test_platform_nonblocking_accept);
+    RUN_TEST(test_platform_blocking_accept);
     RUN_TEST(test_platform_open_browser_null);
     RUN_TEST(test_platform_atomic_write_success);
     RUN_TEST(test_platform_atomic_write_bad_path);

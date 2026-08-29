@@ -84,8 +84,12 @@ static size_t mutate(const char *src, size_t src_len, char *out, size_t out_max)
     return len;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     int duration = FUZZ_DURATION_SECS;
+    if (argc > 1) {
+        int parsed = atoi(argv[1]);
+        if (parsed > 0) duration = parsed;
+    }
     unsigned long long total_cycles = 0;
     unsigned long long failures = 0;
 

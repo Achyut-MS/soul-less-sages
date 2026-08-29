@@ -100,7 +100,7 @@ asan: clean test fuzz_roundtrip$(EXE)
 	@echo ===========================================
 	@echo Running Fuzzing Smoke Test under AddressSanitizer
 	@echo ===========================================
-	./fuzz_roundtrip$(EXE)
+	./fuzz_roundtrip$(EXE) $(DURATION)
 
 # Coverage Analysis Target
 coverage: CFLAGS = -Wall -Wextra -Werror -std=$(STD) -O0 -g --coverage -DTEST_MODE
@@ -121,7 +121,7 @@ fuzz: fuzz_roundtrip$(EXE)
 	@echo ===========================================
 	@echo Running Round-Trip Fuzzer \($(DURATION)s budget\)
 	@echo ===========================================
-	./fuzz_roundtrip$(EXE)
+	./fuzz_roundtrip$(EXE) $(DURATION)
 
 fuzz_roundtrip$(EXE): tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c src-c/tokenizer.c src-c/error_report.c
 	$(CC) $(CFLAGS) -DFUZZ_DURATION_SECS=$(DURATION) tests/fuzz_roundtrip.c src-c/md_parser.c src-c/html_serializer.c src-c/tokenizer.c src-c/error_report.c -o fuzz_roundtrip$(EXE) $(LDFLAGS)
