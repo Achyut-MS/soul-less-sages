@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 #include "../src-c/md_parser.h"
 #include "../src-c/html_serializer.h"
 
@@ -84,6 +88,16 @@ static size_t mutate(const char *src, size_t src_len, char *out, size_t out_max)
     return len;
 }
 
+static long long get_time_ms(void) {
+#ifdef _WIN32
+    return (long long)GetTickCount64();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+#endif
+}
+
 int main(int argc, char **argv) {
     int duration = FUZZ_DURATION_SECS;
     if (argc > 1) {
@@ -99,17 +113,13 @@ int main(int argc, char **argv) {
     printf("Starting round-trip fuzz testing (budget: %d seconds)...\n", duration);
     fflush(stdout);
 
-    struct timespec start_ts;
-    clock_gettime(CLOCK_MONOTONIC, &start_ts);
-    long long start_ms = (long long)start_ts.tv_sec * 1000 + start_ts.tv_nsec / 1000000;
+    long long start_ms = get_time_ms();
 
     char mutated[4096];
 
     while (1) {
         /* Check elapsed time */
-        struct timespec now_ts;
-        clock_gettime(CLOCK_MONOTONIC, &now_ts);
-        long long now_ms = (long long)now_ts.tv_sec * 1000 + now_ts.tv_nsec / 1000000;
+        long long now_ms = get_time_ms();
         if (now_ms - start_ms >= (long long)duration * 1000) {
             break;
         }
@@ -141,9 +151,11 @@ int main(int argc, char **argv) {
         /* Step 3: render(html_to_md(md_to_html(x))) — second pass */
         md_parse_result_t r3 = md_to_html(r2.markdown, strlen(r2.markdown));
         if (!r3.success) {
-            /* Round-trip second pass rejected — this IS unexpected */
-            fprintf(stderr, "FUZZ FAILURE at cycle %llu: second-pass parse failed\n", total_cycles);
-            fprintf(stderr, "  Input: [%.*s]\n", (int)(mut_len > 80 ? 80 : mut_len), mutated);
+            /* If serializer produced markdown, parser must accept it */
+            fprintf(stderr, "FUZZ FAILURE at cycle %llu: re-parsing serialized markdown failed\n", total_cycles);
+            fprintf(stderr, "  Input:      [%.*s]\n", (int)(mut_len > 80 ? 80 : mut_len), mutated);
+            fprintf(stderr, "  HTML:       [%.80s]\n", r1.html);
+            fprintf(stderr, "  Serialized: [%.80s]\n", r2.markdown);
             failures++;
             md_parse_result_free(&r1);
             html_serialize_result_free(&r2);
@@ -180,9 +192,7 @@ int main(int argc, char **argv) {
     }
 
     /* Report */
-    struct timespec end_ts;
-    clock_gettime(CLOCK_MONOTONIC, &end_ts);
-    long long end_ms = (long long)end_ts.tv_sec * 1000 + end_ts.tv_nsec / 1000000;
+    long long end_ms = get_time_ms();
     double elapsed_secs = (double)(end_ms - start_ms) / 1000.0;
 
     printf("\n=== Fuzz Report ===\n");
