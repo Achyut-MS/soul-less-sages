@@ -11,11 +11,21 @@ fuzz_roundtrip
 run_conformance
 test_parser
 test_html_serializer
+test_platform
+test_file_writer
+test_*.exe
 
 # Gcov / Lcov Code Coverage Products
 *.gcda
 *.gcno
 *.gcov
+*.info
+coverage/
+
+# Leftover test/runtime artifacts
+*.tmp
+.*.tmp
+tests/*.tmp
 
 # IDEs and OS Metadata
 .vscode/
