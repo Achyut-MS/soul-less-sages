@@ -41,7 +41,7 @@ This ledger documents the standard-library and hand-rolled replacements for pack
 
 ### 4. `electron` / `tauri` / `neutralinojs` (Desktop App Frameworks)
 - **Typical Downloads:** Millions of desktop app builds
-- **Replaced With:** Hand-rolled C23 Desktop Runner ([`src-c/platform.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/platform.c), [`src-c/main.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/main.c)) using POSIX `fork()` + `execvp("xdg-open", ...)` / Win32 `ShellExecuteA()`.
+- **Replaced With:** Hand-rolled C23 Desktop Runner (`platform.c`, `main.c`) using POSIX `xdg-open` / Win32 `ShellExecuteA()`.
 - **Rationale & Implementation:** Instead of shipping a 150MB Electron runtime with hundreds of npm packages, the C executable directly serves the local dumb-terminal UI and automatically spawns the desktop view natively with zero third-party dependencies.
 
 ### 5. `chalk` / `colord` / `ansi-colors` (Terminal Styling)
@@ -97,7 +97,7 @@ This section documents standard-library and native API substitutions developed b
 
 ### 1. `express` / `libmicrohttpd` / `cpp-httplib` (HTTP/1.1 Companion Server)
 *   **Weekly Downloads:** ~32,000,000 / week (npm) | ~1,200,000 / week (C/C++ libraries combined)
-*   **Replaced With:** Direct loopback TCP socket server ([`src-c/http.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/http.c), [`src-c/platform.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/platform.c)) using raw POSIX sockets (`<sys/socket.h>`) on Linux and Winsock2 (`<winsock2.h>`) on Windows.
+*   **Replaced With:** Direct loopback TCP socket server ([`src-c/http.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/http.c), [`src-c/platform.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/platform.c)) using raw POSIX sockets (`<sys/socket.h>`) on Linux and Winsock2 (`<winsock2.h>`) on Windows.
 *   **One-Line Rationale:** Hand-rolled raw socket binds and request-line parsing avoided pulling in a multi-thousand-line web server package or compiler dependency.
 *   **Honest Limitations Disclosure:** 
     *   *No Keep-Alive:* The socket is immediately closed after responding (`Connection: close`), resulting in lower throughput and higher latency for repeated asset loading compared to Express.
@@ -105,7 +105,7 @@ This section documents standard-library and native API substitutions developed b
 
 ### 2. `electron` / `tauri` (Desktop Application Framework & Browser Launcher)
 *   **Weekly Downloads:** ~3,500,000 / week (npm) | ~200,000 / week (crates.io)
-*   **Replaced With:** Custom OS desktop protocol wrapper ([`src-c/platform.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/platform.c), [`src-c/main.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/main.c)) invoking `ShellExecuteA` on Windows and `fork()` + `execvp()` on Linux with graceful stdout fallback degradation.
+*   **Replaced With:** Custom OS desktop protocol wrapper ([`src-c/platform.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/platform.c), [`src-c/main.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/main.c)) invoking `ShellExecuteA` on Windows and `fork()` + `execvp()` on Linux with graceful stdout fallback degradation.
 *   **One-Line Rationale:** Direct OS system shell execution launches the native default browser, completely bypassing the need for a bloated 150MB browser wrapper bundle.
 *   **Honest Limitations Disclosure:**
     *   *No Sandboxed Window Control:* We cannot enforce window styling, frame size, or inject custom desktop menus; we are entirely dependent on the user's host web browser configuration.
@@ -113,7 +113,7 @@ This section documents standard-library and native API substitutions developed b
 
 ### 3. `chokidar` / `nodemon` (Live Sync & File Watcher)
 *   **Weekly Downloads:** ~45,000,000 / week (npm)
-*   **Replaced With:** Client-side editor debouncer ([`src-c/static/client.js`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/static/client.js)) + server-side atomic replacement ([`src-c/file_writer.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/file_writer.c)).
+*   **Replaced With:** Client-side editor debouncer ([`src-c/static/client.js`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/static/client.js)) + server-side atomic replacement ([`src-c/file_writer.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/file_writer.c)).
 *   **One-Line Rationale:** Debounced input triggers direct HTTP save requests, rendering disk-watching daemons redundant and reducing filesystem wear.
 *   **Honest Limitations Disclosure:**
     *   *Unidirectional Notification:* Replaced real-time background file change polling with client-driven HTTP write pushes; if the file is modified on disk by an external editor, the client preview will not automatically update.
@@ -121,7 +121,7 @@ This section documents standard-library and native API substitutions developed b
 
 ### 4. `cJSON` / `jsmn` / `nlohmann-json` (JSON Parser & Serializer)
 *   **Weekly Downloads:** ~15,000,000 / week (C/C++ packages combined)
-*   **Replaced With:** Scoped string-scanner and character unescaper ([`src-c/http.c`](file:///c:/Users/bhaga/OneDrive/Desktop/ZeroDependency/src-c/http.c)) using `<string.h>` and `<stdlib.h>`.
+*   **Replaced With:** Scoped string-scanner and character unescaper ([`src-c/http.c`](file:///home/aaarya/Desktop/Projects/SoulessSages/src-c/http.c)) using `<string.h>` and `<stdlib.h>`.
 *   **One-Line Rationale:** Hand-rolled string search and manual escape mapping avoided compiling a full JSON AST parser when we only needed to extract single root keys.
 *   **Honest Limitations Disclosure:**
     *   *No AST Parsing / Validation:* The parser does not support nested JSON objects, JSON arrays, numeric/boolean type validation, or whitespaces inside keys (it strictly expects flat, contiguous string-value matches like `"key":"value"`).
@@ -182,7 +182,7 @@ For a complete technical reference table of every header and function used acros
 
 ---
 
-## 5. Disclosed External Test Corpus
+## 6. Disclosed External Test Corpus
 
 Per hackathon rules ([zerodepshack.com/#rules](https://zerodepshack.com/#rules)), test data (not code) used to verify conformance is disclosed:
 - `tests/commonmark/spec.json`: The official CommonMark specification test corpus (JSON data file only, processed by our zero-dep test runner). No third-party code is included.

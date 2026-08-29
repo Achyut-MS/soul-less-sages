@@ -53,7 +53,7 @@ fi
 # Test 3: POST /render (Success)
 echo -n "Test 3: POST /render (Success) ... "
 RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -d '{"md":"# Hello"}' "$URL/render")
-if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "Stub HTML output"; then
+if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "Hello"; then
     echo "PASSED"
 else
     echo "FAILED"
@@ -63,7 +63,7 @@ fi
 # Test 4: POST /serialize (Success)
 echo -n "Test 4: POST /serialize (Success) ... "
 RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -d '{"html":"<p>Stub</p>"}' "$URL/serialize")
-if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "Stub Markdown output"; then
+if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "Stub"; then
     echo "PASSED"
 else
     echo "FAILED"
@@ -84,6 +84,26 @@ fi
 echo -n "Test 6: POST /render (413 Payload Too Large) ... "
 RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 70000" -d "" "$URL/render" 2>/dev/null || true)
 if echo "$RESP" | grep -q "413 Request Entity Too Large"; then
+    echo "PASSED"
+else
+    echo "FAILED"
+    FAILED=$((FAILED+1))
+fi
+
+# Test 7: GET /file (Retrieve initial file payload)
+echo -n "Test 7: GET /file ... "
+RESP=$(curl -s -i "$URL/file")
+if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "\"content\""; then
+    echo "PASSED"
+else
+    echo "FAILED"
+    FAILED=$((FAILED+1))
+fi
+
+# Test 8: POST /save (Save content)
+echo -n "Test 8: POST /save ... "
+RESP=$(curl -s -i -X POST -H "Content-Type: application/json" -d '{"content":"# Saved Title"}' "$URL/save")
+if echo "$RESP" | grep -q "200 OK" && echo "$RESP" | grep -q "\"status\":\"ok\""; then
     echo "PASSED"
 else
     echo "FAILED"

@@ -53,7 +53,7 @@ try {
 Write-Host -NoNewline "Test 3: POST /render (Success) ... "
 try {
     $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -d "{\"md\":\"# Hello\"}" http://127.0.0.1:28080/render
-    if ($resp -match "200 OK" -and $resp -match "Stub HTML output") {
+    if ($resp -match "200 OK" -and $resp -match "Hello") {
         Write-Host "PASSED" -ForegroundColor Green
     } else {
         Write-Host "FAILED" -ForegroundColor Red
@@ -68,7 +68,7 @@ try {
 Write-Host -NoNewline "Test 4: POST /serialize (Success) ... "
 try {
     $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -d "{\"html\":\"<p>Stub</p>\"}" http://127.0.0.1:28080/serialize
-    if ($resp -match "200 OK" -and $resp -match "Stub Markdown output") {
+    if ($resp -match "200 OK" -and $resp -match "Stub") {
         Write-Host "PASSED" -ForegroundColor Green
     } else {
         Write-Host "FAILED" -ForegroundColor Red
@@ -99,6 +99,36 @@ Write-Host -NoNewline "Test 6: POST /render (413 Payload Too Large) ... "
 try {
     $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -H "Content-Length: 70000" -d "" http://127.0.0.1:28080/render
     if ($resp -match "413 Request Entity Too Large") {
+        Write-Host "PASSED" -ForegroundColor Green
+    } else {
+        Write-Host "FAILED" -ForegroundColor Red
+        $failed++
+    }
+} catch {
+    Write-Host "FAILED ($_)" -ForegroundColor Red
+    $failed++
+}
+
+# Test 7: GET /file (Retrieve initial file payload)
+Write-Host -NoNewline "Test 7: GET /file ... "
+try {
+    $resp = & curl.exe --% -s -i http://127.0.0.1:28080/file
+    if ($resp -match "200 OK" -and $resp -match "content") {
+        Write-Host "PASSED" -ForegroundColor Green
+    } else {
+        Write-Host "FAILED" -ForegroundColor Red
+        $failed++
+    }
+} catch {
+    Write-Host "FAILED ($_)" -ForegroundColor Red
+    $failed++
+}
+
+# Test 8: POST /save (Save content)
+Write-Host -NoNewline "Test 8: POST /save ... "
+try {
+    $resp = & curl.exe --% -s -i -X POST -H "Content-Type: application/json" -d "{\"content\":\"# Saved Title\"}" http://127.0.0.1:28080/save
+    if ($resp -match "200 OK" -and $resp -match "ok") {
         Write-Host "PASSED" -ForegroundColor Green
     } else {
         Write-Host "FAILED" -ForegroundColor Red

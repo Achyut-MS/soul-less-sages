@@ -182,7 +182,24 @@ errorDismiss.addEventListener('click', () => {
 });
 
 /* Initialize editor view on load */
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const res = await fetch('/file');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.content && data.content.length > 0) {
+                sourceEl.value = data.content;
+            }
+            if (data.filename && data.filename.length > 0) {
+                const headerTitle = document.querySelector('.pane.source-pane .pane-header');
+                if (headerTitle) {
+                    headerTitle.textContent = `Markdown Source (${data.filename})`;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Could not load initial file', e);
+    }
     activeEditor = 'source';
     renderMarkdown();
 });

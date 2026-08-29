@@ -309,6 +309,47 @@ textarea#markdown-source {
     text-decoration: underline;
 }
 
+/* Tables styling */
+#html-preview table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+    font-size: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    display: table;
+}
+
+#html-preview thead {
+    background-color: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+}
+
+#html-preview th {
+    padding: 10px 14px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+#html-preview td {
+    padding: 8px 14px;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    vertical-align: top;
+    line-height: 1.5;
+}
+
+#html-preview tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+#html-preview tr:hover {
+    background-color: rgba(79, 70, 229, 0.04);
+}
+
 /* Animations */
 @keyframes slideDown {
     from { transform: translateY(-100%); }

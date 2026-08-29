@@ -32,15 +32,16 @@
 #include "platform.h"
 #include "md_parser.h"
 #include "html_serializer.h"
+#include "file_writer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 
-/* Global variables for graceful shutdown handling */
+/* Global variables for graceful shutdown and file tracking */
 volatile sig_atomic_t g_keep_running = 1;
 platform_socket_t g_server_fd = PLATFORM_INVALID_SOCKET;
-#include <string.h>
+static char g_initial_file[512] = {0};
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -219,6 +220,41 @@ static void send_error_response(platform_socket_t client_fd, int status_code, co
     }
 }
 
+static bool get_exe_dir(char *out_dir, size_t max_len) {
+    if (!out_dir || max_len == 0) return false;
+#ifdef _WIN32
+    char path[MAX_PATH];
+    DWORD len = GetModuleFileNameA(NULL, path, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) return false;
+    char *last_slash = strrchr(path, '\\');
+    char *last_fslash = strrchr(path, '/');
+    char *sep = last_slash > last_fslash ? last_slash : last_fslash;
+    if (sep) {
+        *sep = '\0';
+        size_t slen = strlen(path);
+        if (slen >= max_len) return false;
+        memcpy(out_dir, path, slen + 1);
+        return true;
+    }
+    return false;
+#else
+    char path[1024];
+    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len > 0) {
+        path[len] = '\0';
+        char *last_slash = strrchr(path, '/');
+        if (last_slash) {
+            *last_slash = '\0';
+            size_t slen = strlen(path);
+            if (slen >= max_len) return false;
+            memcpy(out_dir, path, slen + 1);
+            return true;
+        }
+    }
+    return false;
+#endif
+}
+
 /* Serves files out of static/ folder. Assures no relative path traversal is allowed. */
 static bool serve_static_file(platform_socket_t client_fd, const char *path) {
     /* Prevent directory traversal attacks checking for ".." */
@@ -227,17 +263,33 @@ static bool serve_static_file(platform_socket_t client_fd, const char *path) {
         return true;
     }
 
-    char filepath[512];
-    /* Try src-c/static/ first (project root runs), fallback to static/ (src-c runs) */
-    int written = snprintf(filepath, sizeof(filepath), "src-c/static/%s", path);
+    char filepath[1024];
     FILE *f = NULL;
+
+    /* 1. Try relative src-c/static/ */
+    int written = snprintf(filepath, sizeof(filepath), "src-c/static/%s", path);
     if (written > 0 && written < (int)sizeof(filepath)) {
         f = fopen(filepath, "rb");
     }
+    /* 2. Try relative static/ */
     if (!f) {
         written = snprintf(filepath, sizeof(filepath), "static/%s", path);
         if (written > 0 && written < (int)sizeof(filepath)) {
             f = fopen(filepath, "rb");
+        }
+    }
+    /* 3. Try directory of the running binary */
+    char exe_dir[512];
+    if (!f && get_exe_dir(exe_dir, sizeof(exe_dir))) {
+        written = snprintf(filepath, sizeof(filepath), "%s/src-c/static/%s", exe_dir, path);
+        if (written > 0 && written < (int)sizeof(filepath)) {
+            f = fopen(filepath, "rb");
+        }
+        if (!f) {
+            written = snprintf(filepath, sizeof(filepath), "%s/static/%s", exe_dir, path);
+            if (written > 0 && written < (int)sizeof(filepath)) {
+                f = fopen(filepath, "rb");
+            }
         }
     }
 
@@ -363,6 +415,37 @@ static void process_client(platform_socket_t client_fd) {
     if (strcmp(method, "GET") == 0) {
         if (strcmp(path, "/") == 0) {
             serve_static_file(client_fd, "index.html");
+        } else if (strcmp(path, "/file") == 0) {
+            char *file_content = malloc(65536);
+            char *esc_content = malloc(65536);
+            char *esc_fname = malloc(1024);
+            char *resp_json = malloc(131072);
+
+            if (!file_content || !esc_content || !esc_fname || !resp_json) {
+                send_error_response(client_fd, 500, "Internal Server Error");
+                free(file_content); free(esc_content); free(esc_fname); free(resp_json);
+                free(req_buf);
+                return;
+            }
+
+            file_content[0] = '\0';
+            if (g_initial_file[0] != '\0') {
+                FILE *f = fopen(g_initial_file, "rb");
+                if (f) {
+                    size_t read_bytes = fread(file_content, 1, 65535, f);
+                    file_content[read_bytes] = '\0';
+                    fclose(f);
+                }
+            }
+
+            json_escape(file_content, esc_content, 65536);
+            json_escape(g_initial_file, esc_fname, 1024);
+            (void)snprintf(resp_json, 131072, "{\"content\":\"%s\",\"filename\":\"%s\"}", esc_content, esc_fname);
+            send_response(client_fd, 200, "OK", "application/json", resp_json);
+
+            free(file_content); free(esc_content); free(esc_fname); free(resp_json);
+            free(req_buf);
+            return;
         } else if (strncmp(path, "/static/", 8) == 0) {
             serve_static_file(client_fd, path + 8);
         } else {
@@ -382,6 +465,10 @@ static void process_client(platform_socket_t client_fd) {
                 free(md_buf);
                 free(req_buf);
                 return;
+            }
+
+            if (g_initial_file[0] != '\0') {
+                file_writer_schedule_save(g_initial_file, md_buf, strlen(md_buf));
             }
 
             md_parse_result_t res = md_to_html(md_buf, strlen(md_buf));
@@ -425,6 +512,10 @@ static void process_client(platform_socket_t client_fd) {
 
             html_serialize_result_t res = html_to_md(html_buf, strlen(html_buf));
             if (res.success) {
+                if (res.markdown && g_initial_file[0] != '\0') {
+                    file_writer_schedule_save(g_initial_file, res.markdown, strlen(res.markdown));
+                }
+
                 char *esc_md = malloc(65536);
                 char *resp_json = malloc(65536);
                 if (esc_md && resp_json) {
@@ -452,6 +543,27 @@ static void process_client(platform_socket_t client_fd) {
 
             html_serialize_result_free(&res);
             free(html_buf);
+        } else if (strcmp(path, "/save") == 0) {
+            char *save_buf = malloc(65536);
+            if (!save_buf) {
+                send_error_response(client_fd, 500, "Internal Server Error");
+                free(req_buf);
+                return;
+            }
+
+            if (!extract_json_string(body, "content", save_buf, 65536)) {
+                send_response(client_fd, 400, "Bad Request", "application/json", "{\"error\":\"invalid or missing 'content' field in JSON\"}");
+                free(save_buf);
+                free(req_buf);
+                return;
+            }
+
+            if (g_initial_file[0] != '\0') {
+                file_writer_schedule_save(g_initial_file, save_buf, strlen(save_buf));
+            }
+
+            send_response(client_fd, 200, "OK", "application/json", "{\"status\":\"ok\"}");
+            free(save_buf);
 #ifdef TEST_MODE
         } else if (strcmp(path, "/shutdown") == 0) {
             g_keep_running = 0;
@@ -468,6 +580,12 @@ static void process_client(platform_socket_t client_fd) {
 }
 
 bool http_server_run(int port, const char *initial_file) {
+    if (initial_file) {
+        (void)snprintf(g_initial_file, sizeof(g_initial_file), "%s", initial_file);
+    } else {
+        g_initial_file[0] = '\0';
+    }
+
     platform_socket_t server_fd = platform_bind_listen(port);
     if (server_fd == PLATFORM_INVALID_SOCKET) {
         fprintf(stderr, "Error: HTTP Server failed to bind to port %d\n", port);

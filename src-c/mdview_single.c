@@ -7,6 +7,8 @@
  */
 
 #include "platform.c"
+#include "tokenizer.c"
+#include "error_report.c"
 #include "md_parser.c"
 #include "html_serializer.c"
 #include "file_writer.c"

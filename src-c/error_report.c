@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void append_str(char **dst, const char *src) {
+static void err_append_str(char **dst, const char *src) {
     if (!src || !dst) {
         return;
     }
@@ -128,19 +128,19 @@ char *error_report_create(const char *source, size_t line, size_t col, const cha
     char *out = NULL;
     char header[256];
     snprintf(header, sizeof(header), "error: %s\n  --> line %zu, col %zu\n   |\n", message, line, col);
-    append_str(&out, header);
+    err_append_str(&out, header);
 
     char num_buf[64];
     snprintf(num_buf, sizeof(num_buf), "%zu | %s\n", line, source_line ? source_line : "");
-    append_str(&out, num_buf);
-    append_str(&out, "   | ");
+    err_append_str(&out, num_buf);
+    err_append_str(&out, "   | ");
     for (size_t i = 1; i < col; ++i) {
-        append_str(&out, " ");
+        err_append_str(&out, " ");
     }
     for (size_t i = 0; i < caret_len; ++i) {
-        append_str(&out, "^");
+        err_append_str(&out, "^");
     }
-    append_str(&out, "\n");
+    err_append_str(&out, "\n");
 
     free(source_line);
     return out;
