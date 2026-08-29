@@ -37,6 +37,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#ifndef _WIN32
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
+#include <limits.h>
 
 /* Global variables for graceful shutdown and file tracking */
 volatile sig_atomic_t g_keep_running = 1;
@@ -334,6 +339,174 @@ static bool serve_static_file(platform_socket_t client_fd, const char *path) {
     return true;
 }
 
+/* =====================================================================
+ * File browsing helpers (zero-dependency, standard library only)
+ * ===================================================================== */
+
+/* Decodes %XX and '+' escapes in a URL query component. */
+static void url_decode(const char *src, char *out, size_t out_max) {
+    size_t j = 0;
+    for (size_t i = 0; src[i] != '\0' && j < out_max - 1; i++) {
+        if (src[i] == '%' && src[i + 1] != '\0' && src[i + 2] != '\0') {
+            char hex[3] = { src[i + 1], src[i + 2], '\0' };
+            char *end = NULL;
+            long val = strtol(hex, &end, 16);
+            if (end && *end == '\0') {
+                out[j++] = (char)val;
+                i += 2;
+                continue;
+            }
+        } else if (src[i] == '+') {
+            out[j++] = ' ';
+            continue;
+        }
+        out[j++] = src[i];
+    }
+    out[j] = '\0';
+}
+
+/* Extracts the value of a query parameter (e.g. "path" in "/file?path=x"). */
+static bool get_query_param(const char *path, const char *key, char *out, size_t out_max) {
+    const char *q = strchr(path, '?');
+    if (!q) return false;
+    q++;
+    size_t key_len = strlen(key);
+    while (*q) {
+        if (strncmp(q, key, key_len) == 0 && q[key_len] == '=') {
+            const char *val = q + key_len + 1;
+            const char *end = strchr(val, '&');
+            size_t len = end ? (size_t)(end - val) : strlen(val);
+            char raw[512];
+            if (len >= sizeof(raw)) return false;
+            memcpy(raw, val, len);
+            raw[len] = '\0';
+            url_decode(raw, out, out_max);
+            return true;
+        }
+        const char *amp = strchr(q, '&');
+        if (!amp) break;
+        q = amp + 1;
+    }
+    return false;
+}
+
+/*
+ * Resolves a user-supplied markdown path to a safe local file.
+ * Rules:
+ *  - Rejects absolute paths and any '..' component (traversal guard).
+ *  - Rejects anything not ending in .md / .markdown.
+ *  - Paths are interpreted relative to the server working directory,
+ *    which is where the app was launched (like an IDE opening a project).
+ */
+static bool resolve_md_path(const char *user_path, char *out, size_t out_max) {
+    if (!user_path || user_path[0] == '\0') return false;
+    if (user_path[0] == '/' || user_path[0] == '\\') return false;
+    if (strstr(user_path, "..")) return false;
+    size_t len = strlen(user_path);
+    bool is_md = (len > 3 && strcmp(user_path + len - 3, ".md") == 0) ||
+                 (len > 9 && strcmp(user_path + len - 9, ".markdown") == 0);
+    if (!is_md) return false;
+    int written = snprintf(out, out_max, "%s", user_path);
+    return written > 0 && (size_t)written < out_max;
+}
+
+/* Lists all .md / .markdown files in the current working directory as JSON. */
+#define FILES_JSON_MAX 65536
+static void handle_list_files(platform_socket_t client_fd) {
+    char *resp_json = malloc(FILES_JSON_MAX);
+    if (!resp_json) {
+        send_error_response(client_fd, 500, "Internal Server Error");
+        return;
+    }
+    size_t j = 0;
+    resp_json[j++] = '[';
+
+    DIR *dir = opendir(".");
+    if (dir) {
+        struct dirent *entry;
+        bool first = true;
+        while ((entry = readdir(dir)) != NULL && j < FILES_JSON_MAX - 512) {
+            const char *name = entry->d_name;
+            size_t nlen = strlen(name);
+            bool is_md = false;
+            if (nlen > 3 && strcmp(name + nlen - 3, ".md") == 0) is_md = true;
+            if (nlen > 9 && strcmp(name + nlen - 9, ".markdown") == 0) is_md = true;
+            if (!is_md) continue;
+
+            struct stat st;
+            if (stat(name, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+
+            char esc_name[1024];
+            json_escape(name, esc_name, sizeof(esc_name));
+            int written = snprintf(resp_json + j, FILES_JSON_MAX - j,
+                "%s{\"name\":\"%s\",\"size\":%ld,\"mtime\":%ld}",
+                first ? "" : ",", esc_name, (long)st.st_size, (long)st.st_mtime);
+            if (written < 0) break;
+            j += (size_t)written;
+            first = false;
+        }
+        closedir(dir);
+    }
+
+    if (j < FILES_JSON_MAX - 2) {
+        resp_json[j++] = ']';
+        resp_json[j] = '\0';
+    } else {
+        resp_json[0] = '[';
+        resp_json[1] = ']';
+        resp_json[2] = '\0';
+    }
+    send_response(client_fd, 200, "OK", "application/json", resp_json);
+    free(resp_json);
+}
+
+/* GET /file?path=note.md — loads a specific markdown file from the working dir.
+ * With no path, falls back to the initial CLI file (existing behavior). */
+static void handle_get_file(platform_socket_t client_fd, const char *path) {
+    char user_path[512];
+    char resolved[512];
+
+    bool has_explicit = get_query_param(path, "path", user_path, sizeof(user_path));
+    const char *target = g_initial_file;
+
+    if (has_explicit && user_path[0] != '\0') {
+        if (!resolve_md_path(user_path, resolved, sizeof(resolved))) {
+            send_response(client_fd, 403, "Forbidden", "application/json",
+                "{\"error\":\"invalid or unsafe markdown path\"}");
+            return;
+        }
+        target = resolved;
+    }
+
+    char *file_content = malloc(65536);
+    char *esc_content = malloc(65536);
+    char *esc_fname = malloc(1024);
+    char *resp_json = malloc(131072);
+
+    if (!file_content || !esc_content || !esc_fname || !resp_json) {
+        send_error_response(client_fd, 500, "Internal Server Error");
+        free(file_content); free(esc_content); free(esc_fname); free(resp_json);
+        return;
+    }
+
+    file_content[0] = '\0';
+    if (target && target[0] != '\0') {
+        FILE *f = fopen(target, "rb");
+        if (f) {
+            size_t read_bytes = fread(file_content, 1, 65535, f);
+            file_content[read_bytes] = '\0';
+            fclose(f);
+        }
+    }
+
+    json_escape(file_content, esc_content, 65536);
+    json_escape(target ? target : "", esc_fname, 1024);
+    (void)snprintf(resp_json, 131072, "{\"content\":\"%s\",\"filename\":\"%s\"}", esc_content, esc_fname);
+    send_response(client_fd, 200, "OK", "application/json", resp_json);
+
+    free(file_content); free(esc_content); free(esc_fname); free(resp_json);
+}
+
 /* Receives and routes a client connection */
 static void process_client(platform_socket_t client_fd) {
     char *req_buf = malloc(65536);
@@ -415,35 +588,12 @@ static void process_client(platform_socket_t client_fd) {
     if (strcmp(method, "GET") == 0) {
         if (strcmp(path, "/") == 0) {
             serve_static_file(client_fd, "index.html");
-        } else if (strcmp(path, "/file") == 0) {
-            char *file_content = malloc(65536);
-            char *esc_content = malloc(65536);
-            char *esc_fname = malloc(1024);
-            char *resp_json = malloc(131072);
-
-            if (!file_content || !esc_content || !esc_fname || !resp_json) {
-                send_error_response(client_fd, 500, "Internal Server Error");
-                free(file_content); free(esc_content); free(esc_fname); free(resp_json);
-                free(req_buf);
-                return;
-            }
-
-            file_content[0] = '\0';
-            if (g_initial_file[0] != '\0') {
-                FILE *f = fopen(g_initial_file, "rb");
-                if (f) {
-                    size_t read_bytes = fread(file_content, 1, 65535, f);
-                    file_content[read_bytes] = '\0';
-                    fclose(f);
-                }
-            }
-
-            json_escape(file_content, esc_content, 65536);
-            json_escape(g_initial_file, esc_fname, 1024);
-            (void)snprintf(resp_json, 131072, "{\"content\":\"%s\",\"filename\":\"%s\"}", esc_content, esc_fname);
-            send_response(client_fd, 200, "OK", "application/json", resp_json);
-
-            free(file_content); free(esc_content); free(esc_fname); free(resp_json);
+        } else if (strcmp(path, "/files") == 0) {
+            handle_list_files(client_fd);
+            free(req_buf);
+            return;
+        } else if (strncmp(path, "/file", 5) == 0 && (path[5] == '\0' || path[5] == '?')) {
+            handle_get_file(client_fd, path);
             free(req_buf);
             return;
         } else if (strncmp(path, "/static/", 8) == 0) {
@@ -543,6 +693,79 @@ static void process_client(platform_socket_t client_fd) {
 
             html_serialize_result_free(&res);
             free(html_buf);
+        } else if (strcmp(path, "/open-file") == 0) {
+            char open_path[512];
+            if (!extract_json_string(body, "path", open_path, sizeof(open_path)) ||
+                !resolve_md_path(open_path, g_initial_file, sizeof(g_initial_file))) {
+                send_response(client_fd, 403, "Forbidden", "application/json",
+                    "{\"error\":\"invalid or unsafe markdown path\"}");
+                free(req_buf);
+                return;
+            }
+            printf("[HTTP] Active markdown file switched to: %s\n", g_initial_file);
+            {
+                char esc_open_name[1024];
+                char open_resp[1280];
+                json_escape(g_initial_file, esc_open_name, sizeof(esc_open_name));
+                (void)snprintf(open_resp, sizeof(open_resp),
+                    "{\"status\":\"ok\",\"filename\":\"%s\"}", esc_open_name);
+                send_response(client_fd, 200, "OK", "application/json", open_resp);
+            }
+            free(req_buf);
+            return;
+        } else if (strcmp(path, "/upload-file") == 0) {
+            char up_name[256];
+            char *up_content = malloc(65536);
+            char *resp_json = malloc(1024);
+
+            if (!up_content || !resp_json) {
+                send_error_response(client_fd, 500, "Internal Server Error");
+                free(up_content); free(resp_json);
+                free(req_buf);
+                return;
+            }
+
+            if (!extract_json_string(body, "name", up_name, sizeof(up_name))) {
+                send_response(client_fd, 400, "Bad Request", "application/json",
+                    "{\"error\":\"missing 'name' field\"}");
+                free(up_content); free(resp_json);
+                free(req_buf);
+                return;
+            }
+            if (!extract_json_string(body, "content", up_content, 65536)) {
+                send_response(client_fd, 400, "Bad Request", "application/json",
+                    "{\"error\":\"missing or too large 'content' field (max ~64KB)\"}");
+                free(up_content); free(resp_json);
+                free(req_buf);
+                return;
+            }
+
+            /* Only keep the base name (strip any folder components) and
+             * validate it is a safe markdown filename. */
+            const char *base = up_name;
+            for (const char *p = up_name; *p; p++) {
+                if (*p == '/' || *p == '\\') base = p + 1;
+            }
+            if (!resolve_md_path(base, g_initial_file, sizeof(g_initial_file))) {
+                send_response(client_fd, 403, "Forbidden", "application/json",
+                    "{\"error\":\"only .md / .markdown files can be uploaded\"}");
+                free(up_content); free(resp_json);
+                free(req_buf);
+                return;
+            }
+
+            /* Save the uploaded file into the launch directory and make it
+             * the active file so subsequent edits autosave to it. */
+            file_writer_schedule_save(g_initial_file, up_content, strlen(up_content));
+            printf("[HTTP] Uploaded file saved as: %s (%zu bytes)\n",
+                g_initial_file, strlen(up_content));
+
+            (void)snprintf(resp_json, 1024, "{\"status\":\"ok\",\"filename\":\"%s\"}", base);
+            send_response(client_fd, 200, "OK", "application/json", resp_json);
+            free(up_content);
+            free(resp_json);
+            free(req_buf);
+            return;
         } else if (strcmp(path, "/save") == 0) {
             char *save_buf = malloc(65536);
             if (!save_buf) {

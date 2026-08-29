@@ -203,3 +203,312 @@ window.addEventListener('DOMContentLoaded', async () => {
     activeEditor = 'source';
     renderMarkdown();
 });
+
+/* ============================================================
+ * Word-Style Formatting Toolbar (contenteditable preview)
+ * ============================================================ */
+const toolbarEl = document.getElementById('format-toolbar');
+const blockSelect = document.getElementById('block-select');
+const fontSizeSelect = document.getElementById('font-size-select');
+const fontFamilySelect = document.getElementById('font-family-select');
+const textColorInput = document.getElementById('text-color-input');
+const zoomLevelLabel = document.getElementById('zoom-level');
+
+function applyFormatting(command, value = null) {
+    previewEl.focus();
+    document.execCommand(command, false, value);
+    /* Fire input so the debounced serialize -> source sync runs */
+    previewEl.dispatchEvent(new Event('input', { bubbles: true }));
+    updateToolbarState();
+}
+
+/* Reflect current selection state onto toolbar buttons */
+function updateToolbarState() {
+    if (document.activeElement !== previewEl) return;
+    toolbarEl.querySelectorAll('.toolbar-btn[data-command]').forEach((btn) => {
+        const cmd = btn.dataset.command;
+        try {
+            btn.classList.toggle('active', document.queryCommandState(cmd));
+        } catch (e) {
+            /* Some commands are unsupported in some engines */
+        }
+    });
+
+    const blockTag = (() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        let node = sel.getRangeAt(0).startContainer;
+        while (node && node !== previewEl) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const tag = node.tagName.toLowerCase();
+                if (/^h[1-6]$/.test(tag)) return tag;
+                if (tag === 'p') return 'p';
+            }
+            node = node.parentNode;
+        }
+        return null;
+    })();
+    blockSelect.value = blockTag || 'p';
+}
+
+/* Heading / paragraph blocks via execCommand formatBlock */
+blockSelect.addEventListener('change', () => {
+    const val = blockSelect.value;
+    applyFormatting('formatBlock', val === 'p' ? '<p>' : `<${val}>`);
+});
+
+fontSizeSelect.addEventListener('change', () => {
+    applyFormatting('fontSize', fontSizeSelect.value);
+});
+
+fontFamilySelect.addEventListener('change', () => {
+    applyFormatting('fontName', fontFamilySelect.value);
+});
+
+textColorInput.addEventListener('input', () => {
+    applyFormatting('foreColor', textColorInput.value);
+});
+
+toolbarEl.querySelectorAll('.toolbar-btn[data-command]').forEach((btn) => {
+    btn.addEventListener('mousedown', (e) => {
+        /* preventDefault keeps the text selection alive while clicking buttons */
+        e.preventDefault();
+    });
+    btn.addEventListener('click', () => {
+        applyFormatting(btn.dataset.command);
+    });
+});
+
+previewEl.addEventListener('keyup', updateToolbarState);
+previewEl.addEventListener('mouseup', updateToolbarState);
+
+/* ============================================================
+ * Zoom (Ctrl + / Ctrl -), applied to the editor container
+ * ============================================================ */
+const editorContainer = document.querySelector('.editor-container');
+let currentZoom = 1.0;
+
+function setZoom(z) {
+    currentZoom = Math.min(2.0, Math.max(0.6, z));
+    /* CSS zoom scales layout natively; transform fallback for Firefox */
+    if ('zoom' in editorContainer.style) {
+        editorContainer.style.zoom = currentZoom;
+        editorContainer.style.transform = '';
+        editorContainer.style.transformOrigin = '';
+        editorContainer.style.width = '';
+    } else {
+        editorContainer.style.transformOrigin = '0 0';
+        editorContainer.style.transform = `scale(${currentZoom})`;
+        editorContainer.style.width = `${100 / currentZoom}%`;
+    }
+    zoomLevelLabel.textContent = `${Math.round(currentZoom * 100)}%`;
+}
+
+function zoomEditor(delta) {
+    setZoom(currentZoom + delta);
+}
+
+document.getElementById('zoom-in-btn').addEventListener('click', () => zoomEditor(0.1));
+document.getElementById('zoom-out-btn').addEventListener('click', () => zoomEditor(-0.1));
+document.getElementById('zoom-reset-btn').addEventListener('click', () => setZoom(1.0));
+
+/* ============================================================
+ * Keyboard Shortcuts
+ * ============================================================ */
+document.addEventListener('keydown', (e) => {
+    const isCtrl = e.ctrlKey || e.metaKey;
+
+    /* Zoom: Ctrl+/Ctrl- (and Ctrl+= which many keyboards send for +) */
+    if (isCtrl && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        zoomEditor(0.1);
+        return;
+    }
+    if (isCtrl && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        zoomEditor(-0.1);
+        return;
+    }
+    if (isCtrl && e.key === '0') {
+        e.preventDefault();
+        setZoom(1.0);
+        return;
+    }
+
+    /* Formatting shortcuts only when editing the rich preview */
+    if (document.activeElement !== previewEl) return;
+    const k = e.key.toLowerCase();
+    if (isCtrl && k === 'b') {
+        e.preventDefault();
+        applyFormatting('bold');
+    } else if (isCtrl && k === 'i') {
+        e.preventDefault();
+        applyFormatting('italic');
+    } else if (isCtrl && k === 'u') {
+        e.preventDefault();
+        applyFormatting('underline');
+    }
+});
+
+/* ============================================================
+ * File Explorer (Open Folder -> list -> open -> autosave)
+ * ============================================================ */
+const fileSidebar = document.getElementById('file-sidebar');
+const sidebarDivider = document.getElementById('sidebar-divider');
+const fileListEl = document.getElementById('file-list');
+const openFolderBtn = document.getElementById('open-folder-btn');
+let currentFileName = '';
+
+function setActiveFileLabel(name) {
+    currentFileName = name;
+    const headerTitle = document.querySelector('.pane.source-pane .pane-header');
+    if (headerTitle) {
+        headerTitle.textContent = name ? `Markdown Source (${name})` : 'Markdown Source';
+    }
+}
+
+function renderFileList(files) {
+    fileListEl.innerHTML = '';
+    if (!files || files.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'file-empty';
+        li.textContent = 'No .md files found in this folder';
+        fileListEl.appendChild(li);
+        return;
+    }
+    files.forEach((f) => {
+        const li = document.createElement('li');
+        li.textContent = f.name;
+        li.title = `${f.name} — ${f.size} bytes`;
+        if (f.name === currentFileName) li.classList.add('active-file');
+        li.addEventListener('click', () => openFileFromList(f.name, li));
+        fileListEl.appendChild(li);
+    });
+}
+
+async function openFileFromList(name, liEl) {
+    try {
+        const res = await fetch(`/file?path=${encodeURIComponent(name)}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showError(err.error || `Could not open ${name}`);
+            return;
+        }
+        const data = await res.json();
+        /* Tell the server to retarget autosave to this file */
+        const openRes = await fetch('/open-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: name })
+        });
+        if (!openRes.ok) {
+            const err = await openRes.json().catch(() => ({}));
+            showError(err.error || `Could not switch active file to ${name}`);
+            return;
+        }
+
+        sourceEl.value = data.content || '';
+        setActiveFileLabel(name);
+        fileListEl.querySelectorAll('li').forEach((li) => li.classList.remove('active-file'));
+        if (liEl) liEl.classList.add('active-file');
+
+        /* Re-render preview from the freshly loaded source */
+        activeEditor = 'source';
+        renderMarkdown();
+    } catch (e) {
+        console.error('Failed to open file', e);
+        showError(`Could not open ${name}`);
+    }
+}
+
+async function toggleFolderBrowser() {
+    const isHidden = fileSidebar.classList.contains('hidden');
+    if (isHidden) {
+        try {
+            const res = await fetch('/files');
+            if (res.ok) {
+                const files = await res.json();
+                renderFileList(files);
+            } else {
+                renderFileList([]);
+            }
+        } catch (e) {
+            console.error('Failed to list files', e);
+            renderFileList([]);
+        }
+        fileSidebar.classList.remove('hidden');
+        sidebarDivider.style.display = '';
+    } else {
+        fileSidebar.classList.add('hidden');
+        sidebarDivider.style.display = 'none';
+    }
+}
+
+openFolderBtn.addEventListener('click', toggleFolderBrowser);
+document.getElementById('sidebar-close').addEventListener('click', () => {
+    fileSidebar.classList.add('hidden');
+    sidebarDivider.style.display = 'none';
+});
+
+/* Track the file opened at launch (from /file) for sidebar highlighting */
+setActiveFileLabel('');
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const res = await fetch('/file');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.filename && data.filename.length > 0) {
+                setActiveFileLabel(data.filename);
+            }
+        }
+    } catch (e) { /* non-fatal */ }
+});
+
+/* ============================================================
+ * Upload File — browse the local computer, upload a .md file.
+ * The file is saved server-side into the launch folder and made
+ * the active (autosaved) document.
+ * ============================================================ */
+const uploadBtn = document.getElementById('upload-file-btn');
+const uploadInput = document.getElementById('upload-file-input');
+
+uploadBtn.addEventListener('click', () => uploadInput.click());
+
+uploadInput.addEventListener('change', async () => {
+    const file = uploadInput.files[0];
+    uploadInput.value = ''; /* allow re-selecting the same file later */
+    if (!file) return;
+
+    const name = file.name;
+    if (!/\.(md|markdown)$/i.test(name)) {
+        showError('Only .md or .markdown files can be uploaded');
+        return;
+    }
+
+    try {
+        const text = await file.text();
+        const res = await fetch('/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, content: text })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showError(data.error || `Could not upload ${name}`);
+            return;
+        }
+
+        /* Load into the editor and make it the active autosave file */
+        sourceEl.value = text;
+        setActiveFileLabel(name);
+        if (!fileSidebar.classList.contains('hidden')) {
+            toggleFolderBrowser(); /* refresh list */
+            toggleFolderBrowser();
+        }
+        activeEditor = 'source';
+        renderMarkdown();
+    } catch (e) {
+        console.error('Upload failed', e);
+        showError(`Could not upload ${name}`);
+    }
+});

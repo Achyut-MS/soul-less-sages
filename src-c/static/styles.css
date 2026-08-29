@@ -13,9 +13,9 @@
     
     --header-height: 64px;
     
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-display: 'Outfit', sans-serif;
-    --font-mono: 'Fira Code', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-display: var(--font-sans);
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, "Courier New", monospace;
 }
 
 * {
@@ -373,4 +373,177 @@ textarea#markdown-source {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
+}
+
+/* ============================================================
+ * Word-Style Formatting Toolbar
+ * ============================================================ */
+.top-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    z-index: 9;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px solid var(--border-color);
+}
+
+.toolbar-group:last-child {
+    border-right: none;
+    margin-left: auto;
+}
+
+.toolbar-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 4px 8px;
+    min-width: 28px;
+    height: 28px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.toolbar-btn:hover {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: var(--border-color);
+}
+
+.toolbar-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.toolbar-select {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    height: 28px;
+    padding: 0 4px;
+    cursor: pointer;
+}
+
+.toolbar-color {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    cursor: pointer;
+}
+
+.zoom-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 42px;
+    text-align: center;
+    user-select: none;
+}
+
+.header-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.header-btn:hover {
+    background: var(--accent-hover);
+}
+
+/* ============================================================
+ * File Explorer Sidebar
+ * ============================================================ */
+.file-sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.file-sidebar.hidden {
+    display: none;
+}
+
+.sidebar-close-btn {
+    float: right;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.sidebar-close-btn:hover {
+    color: var(--text-primary);
+}
+
+.file-list {
+    list-style: none;
+    padding: 4px;
+}
+
+.file-list li {
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-list li:hover {
+    background: rgba(79, 70, 229, 0.08);
+}
+
+.file-list li.active-file {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.file-list .file-empty {
+    color: var(--text-secondary);
+    cursor: default;
+    font-size: 12px;
+}
+
+.file-list .file-empty:hover {
+    background: transparent;
+}
+
+.header-btn.secondary {
+    background: var(--bg-primary);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+
+.header-btn.secondary:hover {
+    background: rgba(79, 70, 229, 0.08);
 }

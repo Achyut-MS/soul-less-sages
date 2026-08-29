@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SoullessSages Bidirectional Markdown Editor</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <!-- Google Fonts Preconnect and Links -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <header class="app-header">
@@ -17,6 +13,9 @@
             <h1>SoullessSages <span class="logo-subtitle">Markdown</span></h1>
         </div>
         <div class="header-actions">
+            <button id="open-folder-btn" class="header-btn" title="List markdown files in the launch folder">📂 Open Folder</button>
+            <button id="upload-file-btn" class="header-btn secondary" title="Browse your computer and upload a markdown file">⬆ Upload</button>
+            <input type="file" id="upload-file-input" accept=".md,.markdown,text/markdown" hidden>
             <div id="status-container" class="status-badge state-synced">
                 <span class="status-dot" id="status-dot"></span>
                 <span class="status-text" id="status-text">Synced</span>
@@ -36,8 +35,66 @@
         <button id="error-dismiss" class="error-dismiss-btn" aria-label="Dismiss error">&times;</button>
     </div>
 
+    <!-- Word-Style Formatting Toolbar -->
+    <div class="top-toolbar" id="format-toolbar">
+        <div class="toolbar-group">
+            <select id="block-select" class="toolbar-select" title="Paragraph style">
+                <option value="p">Normal</option>
+                <option value="h1">Heading 1</option>
+                <option value="h2">Heading 2</option>
+                <option value="h3">Heading 3</option>
+                <option value="h4">Heading 4</option>
+            </select>
+        </div>
+        <div class="toolbar-group">
+            <select id="font-size-select" class="toolbar-select" title="Font size">
+                <option value="2">Small</option>
+                <option value="3" selected>Normal</option>
+                <option value="4">Large</option>
+                <option value="5">Larger</option>
+                <option value="6">Huge</option>
+            </select>
+            <select id="font-family-select" class="toolbar-select" title="Font family">
+                <option value="">Font</option>
+                <option value="Arial, sans-serif">Arial</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="'Times New Roman', serif">Times</option>
+                <option value="'Courier New', monospace">Courier</option>
+                <option value="Verdana, sans-serif">Verdana</option>
+            </select>
+        </div>
+        <div class="toolbar-group">
+            <button class="toolbar-btn" data-command="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button class="toolbar-btn" data-command="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button class="toolbar-btn" data-command="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+            <button class="toolbar-btn" data-command="strikeThrough" title="Strikethrough"><s>S</s></button>
+        </div>
+        <div class="toolbar-group">
+            <button class="toolbar-btn" data-command="insertUnorderedList" title="Bullet list">• List</button>
+            <button class="toolbar-btn" data-command="insertOrderedList" title="Numbered list">1. List</button>
+        </div>
+        <div class="toolbar-group">
+            <input type="color" id="text-color-input" class="toolbar-color" value="#1a1a1a" title="Text color">
+            <button class="toolbar-btn" data-command="removeFormat" title="Clear formatting">⌫ Clear</button>
+        </div>
+        <div class="toolbar-group toolbar-right">
+            <button class="toolbar-btn" id="zoom-out-btn" title="Zoom out (Ctrl+-)">−</button>
+            <span id="zoom-level" class="zoom-label">100%</span>
+            <button class="toolbar-btn" id="zoom-in-btn" title="Zoom in (Ctrl++)">+</button>
+            <button class="toolbar-btn" id="zoom-reset-btn" title="Reset zoom">⟲</button>
+        </div>
+    </div>
+
     <!-- Main Workspace Split Pane -->
     <main class="editor-container">
+        <!-- File Explorer Sidebar -->
+        <aside class="file-sidebar hidden" id="file-sidebar">
+            <div class="pane-header">Markdown Files <button id="sidebar-close" class="sidebar-close-btn" title="Close">&times;</button></div>
+            <ul id="file-list" class="file-list"></ul>
+        </aside>
+
+        <div class="split-divider" id="sidebar-divider" style="display:none;"></div>
+
         <section class="pane source-pane">
             <div class="pane-header">Markdown Source</div>
             <textarea id="markdown-source" placeholder="Type your Markdown here..." spellcheck="false" autocomplete="off" autofocus></textarea>
@@ -47,7 +104,7 @@
         
         <section class="pane preview-pane">
             <div class="pane-header">Live Preview (Editable)</div>
-            <div id="html-preview" contenteditable="true" placeholder="Type rendered text directly..." spellcheck="false"></div>
+            <div id="html-preview" class="editor-surface" contenteditable="true" placeholder="Type rendered text directly..." spellcheck="false"></div>
         </section>
     </main>
 
