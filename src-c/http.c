@@ -90,17 +90,6 @@ char *http_parse_json_value(const char *json, const char *key) {
     return dup_str_len(pos, (size_t)(end - pos));
 }
 
-    char *out = (char *)malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    if (len > 0) {
-        memcpy(out, s, len);
-    }
-    out[len] = '\0';
-    return out;
-}
-
 bool http_handle_render_request(const char *request_body, const char **out_html, char **out_error) {
     if (!request_body || !out_html) {
         if (out_error) {

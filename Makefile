@@ -73,7 +73,7 @@ endif
 CFLAGS = -Wall -Wextra -Werror -std=$(STD) -O2
 
 # Source and Object files
-SRC = src-c/main.c src-c/platform.c src-c/http.c src-c/md_parser.c src-c/html_serializer.c src-c/file_writer.c
+SRC = src-c/main.c src-c/md_parser.c src-c/html_serializer.c src-c/http.c src-c/file_writer.c src-c/platform.c src-c/tokenizer.c src-c/error_report.c
 OBJ = $(SRC:.c=.o)
 
 .PHONY: all single asan coverage fuzz commonmark test clean

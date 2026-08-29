@@ -115,7 +115,54 @@ Our desktop server runs a **single-threaded blocking accept loop** with **synchr
 *   **Graceful Shutdown:** To exit cleanly, signal handlers on both Windows (`SetConsoleCtrlHandler`) and Linux (`sigaction` for `SIGINT`/`SIGTERM`) close the global listener socket. This forces the blocked `accept()` call to return immediately with an error, allowing the server to clean up resources, run `atexit()` handlers (writing gcov coverage `.gcda` files), and terminate gracefully.
 *   **Connection Processing:** Each client request is parsed, routed, and responded to synchronously within the main thread, closing the connection immediately via `Connection: close` (no keep-alive support).
 
+## Project Structure
+
+```
+ZeroDependency/
+├── README.md
+├── ARCHITECTURE.md
+├── PRD.md
+├── TASKS.md
+├── SKILLS.md
+├── WORK_SPLIT.md
+├── STDLIB.md                # Package Killer narrative for judges
+├── LIBRARIES_AND_HEADERS.md
+├── deps-proof.txt           # required: proof of zero third-party runtime deps
+├── .zero-dep.toml           # required: track letter + one-line pitch
+├── LICENSE                  # MIT license
+├── Makefile                 # root-level build (make / make test / make asan / make coverage / make fuzz)
+├── gen-deps-proof.sh        # regenerates deps-proof.txt on Linux
+├── gen-deps-proof.ps1       # regenerates deps-proof.txt on Windows
+├── src-c/
+│   ├── Makefile             # `cd src-c && make` (Quick Start path)
+│   ├── main.c              # entry point, CLI arg parsing, desktop app launcher
+│   ├── platform.c / .h     # Windows (Win32/Winsock2) & Linux (POSIX) abstraction
+│   ├── http.c / .h         # cross-platform raw socket server, request parser
+│   ├── md_parser.c / .h    # recursive-descent Markdown → HTML
+│   ├── html_serializer.c / .h  # HTML → Markdown (scoped tag walker)
+│   ├── tokenizer.c / .h    # line/col tracking tokenizer (used by md_parser)
+│   ├── error_report.c / .h # compiler-style caret-annotated error formatting
+│   ├── file_writer.c / .h  # debounced atomic writes (fsync / FlushFileBuffers)
+│   ├── mdview_single.c     # amalgamated single-translation-unit build (make single)
+│   └── static/             # index.html, styles.css, client.js (local desktop UI)
+└── tests/
+    ├── test_harness.h       # hand-rolled test macros (no Unity/GoogleTest)
+    ├── test_parser.c        # md_parser unit tests
+    ├── test_md_parser.c     # extended md_parser tests (tokenizer + error_report)
+    ├── test_html_serializer.c
+    ├── test_platform.c      # socket lifecycle, atomic write, browser fallback
+    ├── test_file_writer.c   # debounce collapse, atomicity crash, error path
+    ├── fuzz_roundtrip.c     # 5-minute time-budgeted round-trip fixed-point fuzzer
+    ├── commonmark/          # CommonMark spec.json + conformance runner
+    ├── integration_tests.sh # curl-based server integration tests (Linux)
+    └── integration_tests.ps1 # curl-based server integration tests (Windows)
+```
+
 ---
+
+## License
+
+MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 
 ## Required Submission Artifacts (per zerodepshack.com rules)
 
@@ -126,40 +173,6 @@ Our desktop server runs a **single-threaded blocking accept loop** with **synchr
 - `.zero-dep.toml` — track letter (`B`) and one-line pitch
 - `README.md` / `STDLIB.md` (this repo)
 - **5-minute demo video — required, not optional** — must show the tool working AND the empty manifest/deps-proof
-
----
-
-## Project Structure
-
-```
-md-viewer/
-├── README.md
-├── ARCHITECTURE.md
-├── PRD.md
-├── TASKS.md
-├── SKILLS.md
-├── deps-proof.txt           # required: proof of zero third-party runtime deps
-├── .zero-dep.toml           # required: track letter + one-line pitch
-├── src-c/
-│   ├── Makefile             # `make` (Linux/macOS) and `mingw32-make` / `nmake` (Windows)
-│   ├── main.c              # entry point, CLI arg parsing, desktop app launcher
-│   ├── platform.c / .h     # Windows (Win32/Winsock2) & Linux (POSIX) abstraction
-│   ├── http.c / http.h     # cross-platform raw socket server, request parser
-│   ├── md_parser.c / .h    # recursive-descent Markdown → HTML
-│   ├── html_serializer.c / .h  # HTML → Markdown (scoped tag walker)
-│   ├── tokenizer.c / .h    # line/col tracking tokenizer
-│   ├── file_writer.c / .h  # debounced atomic writes (fsync / FlushFileBuffers)
-│   └── static/             # index.html, styles.css, client.js (local desktop UI)
-├── tests/
-│   ├── test_md_parser.c
-│   ├── test_html_serializer.c
-│   ├── test_tokenizer.c
-│   ├── fuzz_roundtrip.c    # round-trip fixed-point fuzzer
-│   ├── commonmark/         # CommonMark spec.json + conformance runner
-│   └── fixtures/           # edge-case .md files
-└── docs/
-    └── STDLIB.md            # Package Killer narrative for judges
-```
 
 ---
 

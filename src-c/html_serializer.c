@@ -46,69 +46,6 @@ static char *strip_tag(const char *text) {
     return out;
 }
 
-static void append(char **dst, const char *s) {
-    if (!s) {
-        return;
-    }
-    size_t old_len = *dst ? strlen(*dst) : 0;
-    size_t add_len = strlen(s);
-    char *new_buf = (char *)realloc(*dst, old_len + add_len + 1);
-    if (!new_buf) {
-        free(*dst);
-        *dst = NULL;
-        return;
-    }
-    memcpy(new_buf + old_len, s, add_len + 1);
-    *dst = new_buf;
-}
-
-static char *render_tag(const char *tag, const char *content) {
-    char *out = NULL;
-    if (strcmp(tag, "h1") == 0) {
-        append(&out, "# ");
-    } else if (strcmp(tag, "h2") == 0) {
-        append(&out, "## ");
-    } else if (strcmp(tag, "h3") == 0) {
-        append(&out, "### ");
-    } else if (strcmp(tag, "h4") == 0) {
-        append(&out, "#### ");
-    } else if (strcmp(tag, "h5") == 0) {
-        append(&out, "##### ");
-    } else if (strcmp(tag, "h6") == 0) {
-        append(&out, "###### ");
-    } else if (strcmp(tag, "strong") == 0) {
-        append(&out, "**");
-    } else if (strcmp(tag, "em") == 0) {
-        append(&out, "*");
-    } else if (strcmp(tag, "code") == 0) {
-        append(&out, "`");
-    } else if (strcmp(tag, "li") == 0) {
-        append(&out, "- ");
-    } else if (strcmp(tag, "blockquote") == 0) {
-        append(&out, "> ");
-    } else if (strcmp(tag, "p") == 0) {
-        append(&out, "");
-    }
-
-    append(&out, content ? content : "");
-
-    if (strcmp(tag, "strong") == 0) {
-        append(&out, "**");
-    } else if (strcmp(tag, "em") == 0) {
-        append(&out, "*");
-    } else if (strcmp(tag, "code") == 0) {
-        append(&out, "`");
-    } else if (strcmp(tag, "h1") == 0 || strcmp(tag, "h2") == 0 || strcmp(tag, "h3") == 0 || strcmp(tag, "h4") == 0 || strcmp(tag, "h5") == 0 || strcmp(tag, "h6") == 0) {
-        append(&out, "\n\n");
-    } else if (strcmp(tag, "li") == 0) {
-        append(&out, "\n");
-    } else if (strcmp(tag, "blockquote") == 0) {
-        append(&out, "\n");
-    }
-
-    return out;
-}
-
 html_serialize_result_t html_to_md(const char *html_src, size_t html_len) {
     html_serialize_result_t result;
     result.success = false;
