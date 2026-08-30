@@ -489,7 +489,7 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
                         }
                     }
 
-                    ser_node_add_attr(elem, aname_buf, aval_str ? aval_str : "");
+                    ser_node_add_attr(elem, aname_buf, aval_str);
                     if (aval_str) free(aval_str);
                 }
 
@@ -603,14 +603,16 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
                 ser_builder_append(out, "\\\\");
                 break;
             case '#':
-                if (is_line_start) {
+                /* Only escape # at line start when followed by space or another # (ATX heading) */
+                if (is_line_start && i + 1 < len && (text[i + 1] == ' ' || text[i + 1] == '#')) {
                     ser_builder_append(out, "\\#");
                 } else {
                     ser_builder_append_char(out, c);
                 }
                 break;
             case '>':
-                if (is_line_start) {
+                /* Only escape > at line start when followed by space (blockquote) */
+                if (is_line_start && i + 1 < len && text[i + 1] == ' ') {
                     ser_builder_append(out, "\\>");
                 } else {
                     ser_builder_append_char(out, c);
@@ -700,7 +702,30 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     if (node->type == SER_NODE_TEXT) {
         if (node->text) {
-            ser_emit_escaped_text(out, node->text, ctx);
+            /* If the next sibling is a <br>, strip trailing whitespace from this text node
+             * to prevent round-trip mismatches (md_parser normalizes trailing spaces) */
+            const char *text = node->text;
+            ser_node_t *next = node->next_sibling;
+            bool next_is_br = (next && next->type == SER_NODE_ELEMENT &&
+                               next->tag && strcmp(next->tag, "br") == 0);
+            if (next_is_br) {
+                size_t tlen = strlen(text);
+                while (tlen > 0 && (text[tlen - 1] == ' ' || text[tlen - 1] == '\t')) {
+                    tlen--;
+                }
+                /* Emit only the non-trailing-space portion */
+                char *tmp = (char *)malloc(tlen + 1);
+                if (tmp) {
+                    memcpy(tmp, text, tlen);
+                    tmp[tlen] = '\0';
+                    ser_emit_escaped_text(out, tmp, ctx);
+                    free(tmp);
+                } else {
+                    ser_emit_escaped_text(out, text, ctx);
+                }
+            } else {
+                ser_emit_escaped_text(out, text, ctx);
+            }
         }
         return;
     }
@@ -1063,7 +1088,11 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Line Break: <br> */
     if (strcmp(tag, "br") == 0) {
-        ser_builder_append(out, "  \n");
+        if (out->len == 0 || out->data[out->len - 1] == '\n') {
+            ser_builder_append(out, "\\\n");
+        } else {
+            ser_builder_append(out, "  \n");
+        }
         return;
     }
 
