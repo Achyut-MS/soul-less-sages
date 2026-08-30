@@ -8,6 +8,10 @@
 #include <stdint.h>
 #include <string.h>
 
+/* Hand-rolled converters (zero-dependency, included as static-only TUs) */
+#include "mathml.c"
+#include "mermaid_svg.c"
+
 typedef struct {
     char *label_normalized;
     char *url;
@@ -1848,16 +1852,15 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
                 else close_math++;
             }
             if (close_math < len && text[close_math] == '$' && text[close_math - 1] != ' ') {
-                size_t math_len = close_math - i + 1;
-                char *math_str = xstrdup_len(text + i, math_len);
-                char *escaped_m = xstrdup("");
-                escape_html_append(&escaped_m, math_str);
-                free(math_str);
-                char math_html[1024];
-                snprintf(math_html, sizeof(math_html), "<span class=\"math-inline\">%s</span>", escaped_m);
-                free(escaped_m);
-                inline_token_t tok = {TOK_HTML_TAG, xstrdup(math_html), strlen(math_html), 0, false, false};
-                insert_token_at(&tokens, &count, &cap, count, tok);
+                /* Extract the LaTeX content between $ delimiters */
+                size_t latex_len = close_math - i - 1;
+                char *latex_str = xstrdup_len(text + i + 1, latex_len);
+                char *mathml = latex_to_mathml(latex_str, false);
+                free(latex_str);
+                if (mathml) {
+                    inline_token_t tok = {TOK_HTML_TAG, mathml, strlen(mathml), 0, false, false};
+                    insert_token_at(&tokens, &count, &cap, count, tok);
+                } 
                 i = close_math + 1;
                 continue;
             }
@@ -2790,15 +2793,12 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                     i += 1;
                 }
             }
-            char *escaped_math = xstrdup("");
-            escape_html_append(&escaped_math, math_content);
-            append_str(&html, "<div class=\"math-block\">$$\n");
-            append_str(&html, escaped_math);
-            if (escaped_math[0] != '\0' && escaped_math[strlen(escaped_math) - 1] != '\n') {
+            char *mathml = latex_to_mathml(math_content, true);
+            if (mathml) {
+                append_str(&html, mathml);
                 append_str(&html, "\n");
+                free(mathml);
             }
-            append_str(&html, "$$</div>\n");
-            free(escaped_math);
             free(math_content);
             continue;
         }
@@ -2992,6 +2992,24 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 free_lines(lines, count);
                 free(html);
                 return NULL;
+            }
+            if (fence_info.info && (strcmp(fence_info.info, "mermaid") == 0 || strcmp(fence_info.info, "language-mermaid") == 0)) {
+                char *svg = mermaid_to_svg(code);
+                if (svg) {
+                    char *escaped_src = xstrdup("");
+                    escape_html_append(&escaped_src, code);
+                    append_str(&html, "<div class=\"mermaid\" data-mermaid=\"");
+                    append_str(&html, escaped_src);
+                    append_str(&html, "\">\n");
+                    append_str(&html, svg);
+                    append_str(&html, "</div>\n");
+                    free(escaped_src);
+                    free(svg);
+                    free(code);
+                    free(fence_info.info);
+                    i += 1;
+                    continue;
+                }
             }
             char *escaped = xstrdup("");
             escape_html_append(&escaped, code);

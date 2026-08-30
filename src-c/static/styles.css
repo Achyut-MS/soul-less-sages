@@ -687,27 +687,45 @@ textarea#markdown-source {
     color: var(--accent);
 }
 
-/* Math */
-#html-preview .math-inline {
-    font-family: "KaTeX_Math", "Cambria Math", "Latin Modern Math", Georgia, serif;
-    font-style: italic;
-    background-color: rgba(0, 0, 0, 0.04);
-    padding: 1px 5px;
+/* MathML Native Styling */
+#html-preview math {
+    font-family: "Latin Modern Math", "Cambria Math", STIXGeneral, "DejaVu Math TeX Gyre", serif;
+    font-size: 1.1em;
+}
+
+#html-preview math:not([display="block"]) {
+    display: inline-block;
+    padding: 1px 6px;
+    background-color: var(--bg-secondary);
     border-radius: 4px;
+    vertical-align: middle;
+}
+
+#html-preview math[display="block"] {
+    display: block;
+    text-align: center;
+    margin: 16px 0;
+    padding: 14px 18px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 1.2em;
+}
+
+#html-preview .math-inline {
+    font-family: "Latin Modern Math", "Cambria Math", STIXGeneral, serif;
 }
 
 #html-preview .math-block {
-    font-family: "KaTeX_Math", "Cambria Math", "Latin Modern Math", Georgia, serif;
-    font-style: italic;
+    font-family: "Latin Modern Math", "Cambria Math", STIXGeneral, serif;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 12px 16px;
     margin: 16px 0;
     text-align: center;
-    font-size: 16px;
     overflow-x: auto;
-    white-space: pre-wrap;
 }
 
 /* Images */

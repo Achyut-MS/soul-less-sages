@@ -330,6 +330,17 @@ bool test_mermaid_div(void) {
     return true;
 }
 
+bool test_mathml_serialization(void) {
+    const char *html = "<p>Formula <math><mi>x</mi><mo>+</mo><mn>1</mn></math> and block <math display=\"block\"><mfrac><mi>a</mi><mi>b</mi></mfrac></math></p>";
+    html_serialize_result_t res = html_to_md(html, strlen(html));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.markdown);
+    ASSERT_TRUE(strstr(res.markdown, "$x+1$") != NULL);
+    ASSERT_TRUE(strstr(res.markdown, "\\frac{a}{b}") != NULL);
+    html_serialize_result_free(&res);
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_heading_levels);
     RUN_TEST(test_bold_and_italic);
@@ -337,6 +348,7 @@ int main(void) {
     RUN_TEST(test_combined_bold_italic);
     RUN_TEST(test_strikethrough_del);
     RUN_TEST(test_mermaid_div);
+    RUN_TEST(test_mathml_serialization);
     RUN_TEST(test_inline_code);
     RUN_TEST(test_code_block_with_lang);
     RUN_TEST(test_code_block_no_lang);
