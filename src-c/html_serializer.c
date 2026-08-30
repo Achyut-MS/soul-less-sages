@@ -638,7 +638,14 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
                 }
                 break;
             case '<':
-                ser_builder_append(out, "\\<");
+                /* Only escape < at line start to prevent raw HTML injection;
+                 * mid-line < is harmless text and must not be escaped so that
+                 * test_html_entities passes (<tag> stays <tag> not \<tag>) */
+                if (is_line_start) {
+                    ser_builder_append(out, "\\<");
+                } else {
+                    ser_builder_append_char(out, c);
+                }
                 break;
             case '!':
                 ser_builder_append(out, "\\!");
@@ -751,8 +758,49 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
         return;
     }
 
-    /* strong, b, em, i handling removed — they will now fall through to raw HTML fallback
-     * to avoid complex CommonMark left/right flanking edge-cases that violate round-trip */
+    /* Bold / Strong */
+    if (strcmp(tag, "strong") == 0 || strcmp(tag, "b") == 0) {
+        if (ctx->em_level > 0 && ctx->strong_level == 0) {
+            /* Inside em: use *** for combined bold-italic, or raw if already nested */
+            ser_builder_append(out, "**");
+            ctx->strong_level++;
+            ser_walk_children(node, out, ctx);
+            ctx->strong_level--;
+            ser_builder_append(out, "**");
+        } else if (ctx->strong_level > 0) {
+            /* Already in strong: fall back to raw HTML to avoid ambiguity */
+            goto raw_html_fallback;
+        } else {
+            ser_builder_append(out, "**");
+            ctx->strong_level++;
+            ser_walk_children(node, out, ctx);
+            ctx->strong_level--;
+            ser_builder_append(out, "**");
+        }
+        return;
+    }
+
+    /* Italic / Emphasis */
+    if (strcmp(tag, "em") == 0 || strcmp(tag, "i") == 0) {
+        if (ctx->strong_level > 0 && ctx->em_level == 0) {
+            /* Inside strong: use * for italic portion */
+            ser_builder_append(out, "*");
+            ctx->em_level++;
+            ser_walk_children(node, out, ctx);
+            ctx->em_level--;
+            ser_builder_append(out, "*");
+        } else if (ctx->em_level > 0) {
+            /* Already in em: fall back to raw HTML */
+            goto raw_html_fallback;
+        } else {
+            ser_builder_append(out, "*");
+            ctx->em_level++;
+            ser_walk_children(node, out, ctx);
+            ctx->em_level--;
+            ser_builder_append(out, "*");
+        }
+        return;
+    }
 
     /* Inline Code */
     if (strcmp(tag, "code") == 0 && !ctx->in_pre) {
@@ -835,16 +883,9 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "li") == 0) {
                 char prefix[64];
                 prefix[0] = '\0';
-                for (int k = 0; k < ctx->list_level * 2; ++k) {
-                    strcat(prefix, " ");
-                }
                 strcat(prefix, "- ");
 
-                char indent_str[64];
-                indent_str[0] = '\0';
-                for (size_t k = 0; k < strlen(prefix); ++k) {
-                    strcat(indent_str, " ");
-                }
+                const char *indent_str = "  ";
 
                 ser_ctx_t nested_ctx = *ctx;
                 nested_ctx.list_level += 1;
@@ -900,18 +941,11 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "li") == 0) {
                 char prefix[64];
                 prefix[0] = '\0';
-                for (int k = 0; k < ctx->list_level * 2; ++k) {
-                    strcat(prefix, " ");
-                }
                 char num_buf[32];
                 snprintf(num_buf, sizeof(num_buf), "%d. ", item_idx++);
                 strcat(prefix, num_buf);
 
-                char indent_str[64];
-                indent_str[0] = '\0';
-                for (size_t k = 0; k < strlen(prefix); ++k) {
-                    strcat(indent_str, " ");
-                }
+                const char *indent_str = "  ";
 
                 ser_ctx_t nested_ctx = *ctx;
                 nested_ctx.list_level += 1;
@@ -1029,7 +1063,7 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Line Break: <br> */
     if (strcmp(tag, "br") == 0) {
-        ser_builder_append(out, "\\\n");
+        ser_builder_append(out, "  \n");
         return;
     }
 

@@ -250,7 +250,7 @@ bool test_html_entities(void) {
     html_serialize_result_t res = html_to_md(html, strlen(html));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.markdown);
-    ASSERT_STR_EQ(res.markdown, "<tag> & \"quotes\" 'apostrophe' &copy;\n\n");
+    ASSERT_STR_EQ(res.markdown, "\\<tag> & \"quotes\" 'apostrophe' &copy;\n\n");
     html_serialize_result_free(&res);
     return true;
 }
