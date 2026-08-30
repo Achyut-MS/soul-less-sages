@@ -710,6 +710,83 @@ textarea#markdown-source {
     white-space: pre-wrap;
 }
 
+/* Images */
+#html-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: inline-block;
+    margin: 8px 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Broken / Placeholder Images */
+#html-preview .broken-image-placeholder {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    margin: 10px 0;
+    background-color: var(--bg-secondary);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 100%;
+}
+
+#html-preview .broken-image-placeholder .broken-img-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+#html-preview .broken-image-placeholder .broken-img-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+
+#html-preview .broken-image-placeholder .broken-img-alt {
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+#html-preview .broken-image-placeholder .broken-img-src {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.75;
+    word-break: break-all;
+}
+
+/* Strikethrough */
+#html-preview del,
+#html-preview s,
+#html-preview strike {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+}
+
+/* Mermaid Diagrams */
+#html-preview .mermaid {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    overflow-x: auto;
+}
+
+#html-preview .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
 /* Definition Lists */
 #html-preview dl {
     margin: 16px 0;
@@ -726,4 +803,5 @@ textarea#markdown-source {
     margin-bottom: 8px;
     color: var(--text-secondary);
 }
+
 

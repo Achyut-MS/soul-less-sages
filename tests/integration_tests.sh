@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PORT=28080
+PORT=28082
 URL="http://127.0.0.1:$PORT"
 
 NO_BUILD=0
@@ -25,8 +25,13 @@ echo "=== Launching local server on port $PORT ==="
 ./mdview -p "$PORT" &
 SERVER_PID=$!
 
-# Give the server a moment to bind and listen
-sleep 1
+# Wait for server readiness
+for i in {1..30}; do
+    if curl -s "$URL/" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
 
 FAILED=0
 

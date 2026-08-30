@@ -248,11 +248,45 @@ bool test_parser_errors(void) {
     return true;
 }
 
+bool test_parser_strikethrough(void) {
+    const char *md = "This has ~~strikethrough text~~ and normal text.";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<del>strikethrough text</del>") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
+bool test_parser_math_equations(void) {
+    const char *md = "Inline $E = mc^2$\n\n$$\nx = \\frac{-b}{2a}\n$$\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<span class=\"math-inline\">$E = mc^2$</span>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<div class=\"math-block\">") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
+bool test_parser_mermaid(void) {
+    const char *md = "```mermaid\nflowchart TD\n    A --> B\n```\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<pre><code class=\"language-mermaid\">") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_parser_headings);
     RUN_TEST(test_parser_all_heading_levels);
     RUN_TEST(test_parser_bold_and_italic);
     RUN_TEST(test_parser_triple_emphasis);
+    RUN_TEST(test_parser_strikethrough);
+    RUN_TEST(test_parser_math_equations);
+    RUN_TEST(test_parser_mermaid);
     RUN_TEST(test_parser_inline_code);
     RUN_TEST(test_parser_code_block);
     RUN_TEST(test_parser_code_block_with_lang);
@@ -273,3 +307,4 @@ int main(void) {
     printf("\nTest Summary: %d run, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
 }
+

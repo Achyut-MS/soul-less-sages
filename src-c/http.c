@@ -474,19 +474,26 @@ static bool serve_static_file(platform_socket_t client_fd, const char *path) {
     char filepath[1024];
     FILE *f = NULL;
 
-    /* 1. Try relative src-c/static/ */
-    int written = snprintf(filepath, sizeof(filepath), "src-c/static/%s", path);
+    /* 1. Try direct path (for images / workspace files) */
+    int written = snprintf(filepath, sizeof(filepath), "%s", path);
     if (written > 0 && written < (int)sizeof(filepath)) {
         f = fopen(filepath, "rb");
     }
-    /* 2. Try relative static/ */
+    /* 2. Try relative src-c/static/ */
+    if (!f) {
+        written = snprintf(filepath, sizeof(filepath), "src-c/static/%s", path);
+        if (written > 0 && written < (int)sizeof(filepath)) {
+            f = fopen(filepath, "rb");
+        }
+    }
+    /* 3. Try relative static/ */
     if (!f) {
         written = snprintf(filepath, sizeof(filepath), "static/%s", path);
         if (written > 0 && written < (int)sizeof(filepath)) {
             f = fopen(filepath, "rb");
         }
     }
-    /* 3. Try directory of the running binary */
+    /* 4. Try directory of the running binary */
     char exe_dir[512];
     if (!f && get_exe_dir(exe_dir, sizeof(exe_dir))) {
         written = snprintf(filepath, sizeof(filepath), "%s/src-c/static/%s", exe_dir, path);
@@ -495,6 +502,12 @@ static bool serve_static_file(platform_socket_t client_fd, const char *path) {
         }
         if (!f) {
             written = snprintf(filepath, sizeof(filepath), "%s/static/%s", exe_dir, path);
+            if (written > 0 && written < (int)sizeof(filepath)) {
+                f = fopen(filepath, "rb");
+            }
+        }
+        if (!f) {
+            written = snprintf(filepath, sizeof(filepath), "%s/%s", exe_dir, path);
             if (written > 0 && written < (int)sizeof(filepath)) {
                 f = fopen(filepath, "rb");
             }
@@ -513,6 +526,12 @@ static bool serve_static_file(platform_socket_t client_fd, const char *path) {
         else if (strcmp(ext, ".css") == 0) content_type = "text/css";
         else if (strcmp(ext, ".js") == 0) content_type = "application/javascript";
         else if (strcmp(ext, ".png") == 0) content_type = "image/png";
+        else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) content_type = "image/jpeg";
+        else if (strcmp(ext, ".gif") == 0) content_type = "image/gif";
+        else if (strcmp(ext, ".webp") == 0) content_type = "image/webp";
+        else if (strcmp(ext, ".svg") == 0) content_type = "image/svg+xml";
+        else if (strcmp(ext, ".ico") == 0) content_type = "image/x-icon";
+        else if (strcmp(ext, ".bmp") == 0) content_type = "image/bmp";
     }
 
     /* Calculate file size to populate Content-Length header */
@@ -887,6 +906,19 @@ static void process_client(platform_socket_t client_fd) {
             return;
         } else if (strncmp(path, "/static/", 8) == 0) {
             serve_static_file(client_fd, path + 8);
+        } else if (path[0] == '/' && path[1] != '\0' && !strstr(path, "..")) {
+            const char *clean_path = path + 1;
+            const char *q = strchr(clean_path, '?');
+            char file_only[512];
+            if (q) {
+                size_t flen = (size_t)(q - clean_path);
+                if (flen < sizeof(file_only)) {
+                    memcpy(file_only, clean_path, flen);
+                    file_only[flen] = '\0';
+                    clean_path = file_only;
+                }
+            }
+            serve_static_file(client_fd, clean_path);
         } else {
             send_error_response(client_fd, 404, "Not Found");
         }

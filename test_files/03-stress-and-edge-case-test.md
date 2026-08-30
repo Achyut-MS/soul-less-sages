@@ -156,7 +156,9 @@ Reference style:
 
 ## 8. Image Tests
 
-![Remote image placeholder](https://via.placeholder.com/300x150.png?text=Markdown+Image)
+![Local demo image](demo.webp)
+
+![Remote placeholder image](https://picsum.photos/300/150)
 
 ![Broken image test](missing-image-file.png)
 

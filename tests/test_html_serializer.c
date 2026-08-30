@@ -187,7 +187,7 @@ bool test_nested_ordered_lists(void) {
     html_serialize_result_t res = html_to_md(html, strlen(html));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.markdown);
-    ASSERT_STR_EQ(res.markdown, "1. step 1\n  1. substep a\n  2. substep b\n2. step 2\n\n");
+    ASSERT_STR_EQ(res.markdown, "1. step 1\n   1. substep a\n   2. substep b\n2. step 2\n\n");
     html_serialize_result_free(&res);
     return true;
 }
@@ -310,11 +310,33 @@ bool test_table(void) {
 /* -------------------------------------------------------------------------
  * Main Test Runner
  * ------------------------------------------------------------------------- */
+bool test_strikethrough_del(void) {
+    const char *html = "<p>Here is <del>deleted text</del> and <s>struck text</s></p>";
+    html_serialize_result_t res = html_to_md(html, strlen(html));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.markdown);
+    ASSERT_STR_EQ(res.markdown, "Here is ~~deleted text~~ and ~~struck text~~\n\n");
+    html_serialize_result_free(&res);
+    return true;
+}
+
+bool test_mermaid_div(void) {
+    const char *html = "<div class=\"mermaid\">graph TD;\n    A-->B;</div>";
+    html_serialize_result_t res = html_to_md(html, strlen(html));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.markdown);
+    ASSERT_TRUE(strstr(res.markdown, "```mermaid\ngraph TD;\n    A-->B;\n```") != NULL);
+    html_serialize_result_free(&res);
+    return true;
+}
+
 int main(void) {
     RUN_TEST(test_heading_levels);
     RUN_TEST(test_bold_and_italic);
     RUN_TEST(test_b_and_i_tags);
     RUN_TEST(test_combined_bold_italic);
+    RUN_TEST(test_strikethrough_del);
+    RUN_TEST(test_mermaid_div);
     RUN_TEST(test_inline_code);
     RUN_TEST(test_code_block_with_lang);
     RUN_TEST(test_code_block_no_lang);
@@ -344,4 +366,5 @@ int main(void) {
     printf("\nTest Summary: %d run, %d failed\n", g_tests_run, g_tests_failed);
     return g_tests_failed == 0 ? 0 : 1;
 }
+
 
