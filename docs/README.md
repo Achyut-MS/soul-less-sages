@@ -91,22 +91,24 @@ cd src-c; mingw32-make single; .\mdview_single.exe .\notes.md
 ## Architecture at a Glance
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Browser (vanilla HTML/CSS/JS — no frameworks)              │
-│  ┌──────────────┐              ┌──────────────────────────┐  │
-│  │ <textarea>   │ ──POST /render {md} ──→ │ <div contenteditable> │  │
-│  │  (source)    │              │  (live preview)         │  │
-│  └──────────────┘              └──────────────────────────┘  │
-│         ↑                            │                      │
-│         └──── POST /serialize {html} ┘                      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    │   Server (C)       │
-                    │  · raw socket HTTP │
-                    │  · md_to_html()    │  ← recursive-descent parser
-                    │  · html_to_md()    │  ← DOM-tag walker
-                    │  · atomic writer   │
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Browser (vanilla HTML/CSS/JS — no frameworks)                          │
+│  ┌──────────────┐                         ┌──────────────────────────┐  │
+│  │ <textarea>   │ ─→ POST /render {md} ─→ │  <div contenteditable>   │  │
+│  │  (source)    │                         │   (live preview)         │  │
+│  └──────────────┘                         └──────────────────────────┘  │
+│         ↑                                              ↑                │
+│         └──── POST /serialize {html} ──────────────────┘                │
+└─────────────────────────────────────────────────────────────────────────┘
+                                     │
+                          ┌──────────┴─────────┐
+                          │   Server (C)       │
+                          │  · raw socket HTTP │
+                          │  · md_to_html()    │  ← recursive-descent parser
+                          │  · html_to_md()    │  ← DOM-tag walker
+                          │  · atomic writer   │
+                          └────────────────────┘
+                
 ```
 
 ---
