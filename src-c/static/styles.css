@@ -694,7 +694,6 @@ textarea#markdown-source {
 }
 
 #html-preview math:not([display="block"]) {
-    display: inline-block;
     padding: 1px 6px;
     background-color: var(--bg-secondary);
     border-radius: 4px;
@@ -702,7 +701,6 @@ textarea#markdown-source {
 }
 
 #html-preview math[display="block"] {
-    display: block;
     text-align: center;
     margin: 16px 0;
     padding: 14px 18px;

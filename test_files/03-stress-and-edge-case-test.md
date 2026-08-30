@@ -6,7 +6,7 @@ title: Markdown Stress and Edge Case Test
 
 This file tests complex nesting, long content structures, unusual characters, and renderer edge cases.
 
-## 1. Deeply Nested Lists
+## 1\. Deeply Nested Lists
 
 1. Level 1
    1. Level 2
@@ -19,20 +19,20 @@ This file tests complex nesting, long content structures, unusual characters, an
 
 ---
 
-## 2. Complex Task List
+## 2\. Complex Task List
 
-- [x] Install Markdown viewer
-  - [x] Open file
-  - [x] Render headings
-    - [x] Render nested content
-- [ ] Test unsupported features
-  - [ ] Math
-  - [ ] Mermaid
-  - [ ] HTML
+- \[x\] Install Markdown viewer
+  - \[x\] Open file
+  - \[x\] Render headings
+    - \[x\] Render nested content
+- \[ \] Test unsupported features
+  - \[ \] Math
+  - \[ \] Mermaid
+  - \[ \] HTML
 
 ---
 
-## 3. Complex Blockquote
+## 3\. Complex Blockquote
 
 > # Quote Heading
 >
@@ -49,13 +49,13 @@ This file tests complex nesting, long content structures, unusual characters, an
 
 ---
 
-## 4. Large Table
+## 4\. Large Table
 
-| # | Feature | Input | Expected |
-|---:|---|---|---|
+| \# | Feature | Input | Expected |
+|---|---|---|---|
 | 1 | Bold | `**text**` | **text** |
 | 2 | Italic | `*text*` | *text* |
-| 3 | Code | `` `text` `` | `text` |
+| 3 | Code | ``text`` | `text` |
 | 4 | Strike | `~~text~~` | ~~text~~ |
 | 5 | Link | Markdown link | [Example](https://example.com) |
 | 6 | Emoji | Unicode | 🚀 |
@@ -64,7 +64,7 @@ This file tests complex nesting, long content structures, unusual characters, an
 
 ---
 
-## 5. Code Syntax Stress Test
+## 5\. Code Syntax Stress Test
 
 ```c
 #include <stdio.h>
@@ -118,7 +118,7 @@ WHERE supported = true;
 
 ---
 
-## 6. Tricky Markdown Characters
+## 6\. Tricky Markdown Characters
 
 # This should be a heading
 
@@ -128,60 +128,54 @@ WHERE supported = true;
 
 \_This should not be italic\_
 
-Backticks: ``Use `inline code` inside``
+Backticks: `Use `inline code` inside`
 
 Asterisks: ***bold italic***
 
-Underscores: ___horizontal rule above/below depending on parser___
+Underscores: ***horizontal rule above/below depending on parser***
 
 ---
 
-## 7. Link Variations
+## 7\. Link Variations
 
 [Normal link](https://example.com)
 
 [Link with title](https://example.com "Example Website")
 
-<mailto:test@example.com>
+[mailto:test@example.com](mailto:test@example.com)
 
-<https://example.com/path?query=test&value=123#section>
+[https://example.com/path?query=test&value=123#section](https://example.com/path?query=test&value=123#section)
 
 Reference style:
 
-[Reference Link][ref]
-
-[ref]: https://example.com "Reference example"
+[Reference Link](https://example.com "Reference example")
 
 ---
 
-## 8. Image Tests
+## 8\. Image Tests
 
-![Local demo image](demo.webp)
+<img src="demo.webp" alt="Local demo image" data-has-error-handler="true">
 
-![Remote placeholder image](https://picsum.photos/300/150)
+<img src="https://picsum.photos/300/150" alt="Remote placeholder image" data-has-error-handler="true">
 
-![Broken image test](missing-image-file.png)
+<img src="missing-image-file.png" alt="Broken image test" data-has-error-handler="true" data-fallback-applied="true" style="display: none;"><div class="broken-image-placeholder" title="Image source: missing-image-file.png"><span class="broken-img-icon">🖼️</span><div class="broken-img-meta"><span class="broken-img-alt">Broken image test</span><span class="broken-img-src">missing-image-file.png</span></div></div>
 
 ---
 
-## 9. HTML Edge Cases
+## 9\. HTML Edge Cases
 
-<details open>
+<details open="">
 <summary>Open by default</summary>
-
 This tests the `open` attribute.
 
 </details>
-
-<br>
-
-<hr>
-
-<center>This text uses deprecated HTML centering.</center>
-
+\
 ---
 
-## 10. Mermaid Mindmap
+<center>This text uses deprecated HTML centering.</center>
+---
+
+## 10\. Mermaid Mindmap
 
 ```mermaid
 mindmap
@@ -202,7 +196,7 @@ mindmap
 
 ---
 
-## 11. Unicode Stress Test
+## 11\. Unicode Stress Test
 
 ### Indian Languages
 
@@ -229,19 +223,20 @@ mindmap
 
 ---
 
-## 12. Final Rendering Checklist
+## 12\. Final Rendering Checklist
 
-- [ ] Are headings rendered?
-- [ ] Are tables aligned?
-- [ ] Does syntax highlighting work?
-- [ ] Do images load?
-- [ ] Do links open?
-- [ ] Does math render?
-- [ ] Does Mermaid render?
-- [ ] Does HTML work?
-- [ ] Do Unicode characters display correctly?
-- [ ] Does the renderer remain responsive?
+- \[ \] Are headings rendered?
+- \[ \] Are tables aligned?
+- \[ \] Does syntax highlighting work?
+- \[ \] Do images load?
+- \[ \] Do links open?
+- \[ \] Does math render?
+- \[ \] Does Mermaid render?
+- \[ \] Does HTML work?
+- \[ \] Do Unicode characters display correctly?
+- \[ \] Does the renderer remain responsive?
 
 # 🎯 Stress Test Complete
 
 If your application renders this entire file correctly, it has excellent extended Markdown support.
+

@@ -263,9 +263,9 @@ bool test_parser_math_equations(void) {
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<math>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">") != NULL);
     ASSERT_TRUE(strstr(res.html, "<msup>") != NULL);
-    ASSERT_TRUE(strstr(res.html, "<math display=\"block\">") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">") != NULL);
     ASSERT_TRUE(strstr(res.html, "<mfrac>") != NULL);
     md_parse_result_free(&res);
     return true;

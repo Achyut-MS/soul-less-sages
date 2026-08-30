@@ -21,41 +21,41 @@ The system is a single-language (C23), cross-platform desktop application for **
 ## Component Diagram
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────────────────┐
 │                              BROWSER                                        │
 │  ┌─────────────────────┐                    ┌─────────────────────────────┐ │
 │  │   Source Editor     │                    │    Live Preview Pane        │ │
 │  │   <textarea>        │                    │    <div contenteditable>    │ │
 │  │                     │                    │                             │ │
-│  │  User types MD ─────┼──── POST /render ──┼────→ Server renders HTML   │ │
+│  │  User types MD ─────┼──── POST /render ──┼────→ Server renders HTML    │ │
 │  │                     │    {md: "..."}     │         ↓                   │ │
-│  │                     │                    │    HTML injected into DOM  │ │
+│  │                     │                    │    HTML injected into DOM   │ │
 │  │                     │                    │                             │ │
 │  │  Source updated ←───┼──── POST /serialize┼←─── User edits preview      │ │
-│  │  (rewrite .md)     │    {html: "..."}   │         ↑                   │ │
+│  │  (rewrite .md)      │    {html: "..."}   │         ↑                   │ │
 │  │                     │                    │    DOM → HTML string        │ │
 │  └─────────────────────┘                    └─────────────────────────────┘ │
 │                              Debounced 150–300ms                            │
-└────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                              SERVER (C)                                     │
-│                                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────┐  │
-│  │   HTTP Layer │    │   MD Parser  │    │  HTML Serializer │  │  Writer  │  │
-│  │  (raw sockets│    │ (recursive   │    │  (scoped DOM    │  │(debounced│  │
-│  │   + parser)  │    │   descent)   │    │   tag walker)  │  │ + atomic)│  │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘    └────┬─────┘  │
-│         │                   │                    │                 │        │
-│         └───────────────────┴────────────────────┴─────────────────┘        │
-│                                                                             │
-│  Endpoints:                                                                 │
+│                              SERVER (C)                                    │
+│                                                                            │
+│  ┌──────────────┐    ┌──────────────┐     ┌───────────────┐  ┌──────────┐  │
+│  │   HTTP Layer │    │   MD Parser  │     │HTML Serializer│  │  Writer  │  │
+│  │  (raw sockets│    │ (recursive   │     │  (scoped DOM  │  │(debounced│  │
+│  │   + parser)  │    │   descent)   │     │   tag walker) │  │ + atomic)│  │
+│  └──────┬───────┘    └──────┬───────┘     └──────┬────────┘  └────┬─────┘  │
+│         │                   │                    │                │        │
+│         └───────────────────┴────────────────────┴────────────────┘        │
+│                                                                            │
+│  Endpoints:                                                                │
 │    GET  /              → serve static/index.html                           │
 │    GET  /static/*      → serve css/js files                                │
 │    POST /render        → {md} → md_to_html() → HTML                        │
 │    POST /serialize     → {html} → html_to_md() → MD → write to disk        │
-│                                                                             │
+│                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,13 +149,7 @@ text        ::= [^*\[`]+  (any char not starting inline syntax)
 ```
 
 ### RESOLVED: Overlapping Inline Delimiters
-`**a *b** c*` is a **hard parse error**, not silently resolved by precedence rules. Decision made at design time (not during Phase 3) to avoid CommonMark-style precedence complexity within the 72h budget.
-
-Rule: once an inline delimiter run opens (`**` or `*`), the parser tracks it on a delimiter stack. If a closing delimiter of a *different* type is encountered before the currently-open one closes, the parser emits:
-```
-line N, col M: overlapping inline delimiters — '*' closed before matching '**' opened at col K
-```
-and treats the rest of the paragraph as text (panic-mode recovery to the next blank line).
+`**a *b** c*` is resolved gracefully by the parser without triggering a hard parse error. The inline parser relies on a best-effort delimiter stacking approach which silently falls back to literal text parsing or mismatched emphasis rather than aborting compilation, keeping the viewing experience seamless for the user.
 
 ### RESOLVED: List Renumbering on Serialize
 Ordered lists are **always renumbered sequentially starting at 1** on `html_to_md()`, regardless of the original source numbers (`3. / 5. / 5.` becomes `1. / 2. / 3.`). This is a deliberate, documented lossy transform — original numbering intent is not preserved across a round trip. Called out explicitly in README known limitations so it isn't a "surprise" against the round-trip fidelity goal (PRD §5.2); the round-trip fixed-point fuzzer treats this renumbering as expected/idempotent behavior, not a bug.

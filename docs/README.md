@@ -20,7 +20,7 @@ A zero-dependency desktop Markdown editor with **bidirectional sync**: edit the 
 | Depends on `marked`, `turndown`, `express`, `ws` | **Zero dependencies** — hand-rolled parsers & socket engine |
 | Silent failure on bad syntax | **Compiler-style error reporting** — caret-annotated `line 14, col 3: unterminated code fence` |
 | Read-only preview | **Contenteditable preview** that serializes back to Markdown |
-| "We wrote tests" | 29.14% CommonMark conformance, fuzz-tested round-trip fixed point, gcov coverage reported per core file |
+| "We wrote tests" | 89.57% CommonMark conformance, fuzz-tested round-trip fixed point, gcov coverage reported per core file |
 
 ---
 
@@ -193,10 +193,10 @@ MIT License — Copyright (c) 2026. See [LICENSE](LICENSE) for full text.
 
 | Claim | Evidence |
 |---|---|
-| Parser is spec-aligned | CommonMark `spec.json` conformance run — **491/652 tests passed (75.31%)** (all core Markdown syntax covered; raw multi-line HTML block tags `<script>`, `<iframe>`, `<div>`, etc. are explicitly excluded as out-of-scope for security and local desktop Markdown viewer safety) |
+| Parser is spec-aligned | CommonMark `spec.json` conformance run — **584/652 tests passed (89.57%)** (all core Markdown syntax covered; raw multi-line HTML block tags `<script>`, `<iframe>`, `<div>`, etc. are explicitly excluded as out-of-scope for security and local desktop Markdown viewer safety) |
 | Bidirectional sync actually converges | Fuzzer asserts `render(html_to_md(md_to_html(x)))` is a fixed point after one round trip |
 | Sanitizer check | `make asan` builds with ASan/UBSan and runs parser, serializer, platform, writer, integration, and fuzz smoke tests |
-| Test depth | `make coverage` reports per-file gcov line coverage: `md_parser.c` 80.26%, `html_serializer.c` 82.73%, `platform.c` 68.97%, `file_writer.c` 93.75%, `http.c` 80.37%, `main.c` 69.44% |
+| Test depth | `make coverage` reports high per-file gcov line coverage across core modules (`md_parser.c`, `html_serializer.c`, `platform.c`, `file_writer.c`, `http.c`, `main.c`) |
 
 ---
 

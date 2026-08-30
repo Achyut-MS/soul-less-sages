@@ -101,9 +101,9 @@ ___
 
 | Name | Role | Status |
 |------|:----:|-------:|
-| Bhagat | Developer | Active |
-| Alice | Designer | Active |
-| Bob | Tester | Pending |
+| Bhagat K S| Developer | Active |
+| Achyut M S | Designer | Active |
+| Anirudh Aarya G R | Tester | Pending |
 
 ---
 

@@ -343,9 +343,9 @@ static char *latex_to_mathml(const char *latex, bool display_mode) {
     size_t cap = 0, len = 0;
 
     if (display_mode) {
-        mml_append(&out, &cap, &len, "<math display=\"block\">");
+        mml_append(&out, &cap, &len, "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">");
     } else {
-        mml_append(&out, &cap, &len, "<math>");
+        mml_append(&out, &cap, &len, "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">");
     }
 
     const char *p = latex;
