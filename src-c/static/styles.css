@@ -547,3 +547,183 @@ textarea#markdown-source {
 .header-btn.secondary:hover {
     background: rgba(79, 70, 229, 0.08);
 }
+
+/* ============================================================
+ * Extended Markdown Elements Styling
+ * ============================================================ */
+
+/* Frontmatter */
+#html-preview .frontmatter {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+#html-preview .frontmatter-line {
+    line-height: 1.5;
+}
+
+/* GitHub-Style Alerts */
+#html-preview .markdown-alert {
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-left: 4px solid;
+    border-radius: 6px;
+    background-color: var(--bg-secondary);
+}
+
+#html-preview .markdown-alert p {
+    margin-bottom: 8px;
+}
+
+#html-preview .markdown-alert p:last-child {
+    margin-bottom: 0;
+}
+
+#html-preview .markdown-alert-title {
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+#html-preview .markdown-alert-note {
+    border-left-color: #3b82f6;
+    background-color: #eff6ff;
+}
+#html-preview .markdown-alert-note .markdown-alert-title {
+    color: #1d4ed8;
+}
+
+#html-preview .markdown-alert-tip {
+    border-left-color: #10b981;
+    background-color: #ecfdf5;
+}
+#html-preview .markdown-alert-tip .markdown-alert-title {
+    color: #047857;
+}
+
+#html-preview .markdown-alert-important {
+    border-left-color: #8b5cf6;
+    background-color: #f5f3ff;
+}
+#html-preview .markdown-alert-important .markdown-alert-title {
+    color: #6d28d9;
+}
+
+#html-preview .markdown-alert-warning {
+    border-left-color: #f59e0b;
+    background-color: #fffbeb;
+}
+#html-preview .markdown-alert-warning .markdown-alert-title {
+    color: #b45309;
+}
+
+#html-preview .markdown-alert-caution {
+    border-left-color: #ef4444;
+    background-color: #fef2f2;
+}
+#html-preview .markdown-alert-caution .markdown-alert-title {
+    color: #b91c1c;
+}
+
+/* Details & Summary */
+#html-preview details {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    background-color: var(--bg-secondary);
+}
+
+#html-preview summary {
+    cursor: pointer;
+    font-weight: 600;
+    outline: none;
+    user-select: none;
+}
+
+#html-preview summary:hover {
+    color: var(--accent);
+}
+
+#html-preview details[open] summary {
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+/* Footnotes */
+#html-preview .footnotes {
+    margin-top: 32px;
+    padding-top: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+#html-preview .footnotes hr {
+    margin-bottom: 16px;
+    border: none;
+    border-top: 1px solid var(--border-color);
+}
+
+#html-preview .footnote-ref {
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 2px;
+    text-decoration: none;
+    color: var(--accent);
+}
+
+#html-preview .footnote-backref {
+    text-decoration: none;
+    margin-left: 4px;
+    color: var(--accent);
+}
+
+/* Math */
+#html-preview .math-inline {
+    font-family: "KaTeX_Math", "Cambria Math", "Latin Modern Math", Georgia, serif;
+    font-style: italic;
+    background-color: rgba(0, 0, 0, 0.04);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+#html-preview .math-block {
+    font-family: "KaTeX_Math", "Cambria Math", "Latin Modern Math", Georgia, serif;
+    font-style: italic;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    text-align: center;
+    font-size: 16px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}
+
+/* Definition Lists */
+#html-preview dl {
+    margin: 16px 0;
+}
+
+#html-preview dt {
+    font-weight: 700;
+    margin-top: 12px;
+    color: var(--text-primary);
+}
+
+#html-preview dd {
+    margin-left: 24px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+

@@ -15,6 +15,14 @@ typedef struct {
 } link_ref_t;
 
 typedef struct {
+    char *label;
+    char *label_normalized;
+    char *content;
+    int index;
+    bool used;
+} footnote_def_t;
+
+typedef struct {
     const char *src;
     size_t src_len;
     char *html;
@@ -25,6 +33,8 @@ typedef struct {
     link_ref_t *refs;
     size_t refs_count;
     bool refs_initialized;
+    footnote_def_t *footnotes;
+    size_t footnotes_count;
 } parser_state_t;
 
 typedef struct {
@@ -32,6 +42,16 @@ typedef struct {
     size_t line;
     size_t offset;
 } line_record_t;
+
+static int ci_strncasecmp(const char *s1, const char *s2, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c1 = (unsigned char)tolower((unsigned char)s1[i]);
+        unsigned char c2 = (unsigned char)tolower((unsigned char)s2[i]);
+        if (c1 != c2) return (int)c1 - (int)c2;
+        if (c1 == '\0') break;
+    }
+    return 0;
+}
 
 static char *xstrdup_len(const char *src, size_t len) {
     char *buf = (char *)malloc(len + 1);
@@ -287,7 +307,7 @@ static const char *scan_destination(const char *p, const char *end, char **url_o
             buf[j++] = c;
             p++;
         }
-        if (paren_depth != 0 || j == 0) {
+        if (paren_depth != 0) {
             free(buf);
             return NULL;
         }
@@ -664,6 +684,108 @@ static const link_ref_t *find_link_ref(parser_state_t *st, const char *label) {
     }
     free(norm);
     return found;
+}
+
+static void parse_all_footnotes_from_lines(line_record_t *lines, size_t count, parser_state_t *st) {
+    if (!lines || count == 0 || !st) return;
+    for (size_t i = 0; i < count; i++) {
+        const char *line = lines[i].text;
+        while (*line == ' ' || *line == '\t') line++;
+        if (line[0] == '[' && line[1] == '^') {
+            const char *p = line + 2;
+            const char *label_start = p;
+            while (*p && *p != ']' && *p != ' ' && *p != '\t') p++;
+            if (*p == ']' && *(p + 1) == ':') {
+                size_t label_len = p - label_start;
+                if (label_len > 0) {
+                    char *label = xstrdup_len(label_start, label_len);
+                    const char *content_start = p + 2;
+                    while (*content_start == ' ' || *content_start == '\t') content_start++;
+                    char *content = xstrdup(content_start);
+                    
+                    st->footnotes = (footnote_def_t *)realloc(st->footnotes, (st->footnotes_count + 1) * sizeof(footnote_def_t));
+                    if (st->footnotes) {
+                        st->footnotes[st->footnotes_count].label = label;
+                        st->footnotes[st->footnotes_count].label_normalized = normalize_label(label);
+                        st->footnotes[st->footnotes_count].content = content;
+                        st->footnotes[st->footnotes_count].index = (int)(st->footnotes_count + 1);
+                        st->footnotes[st->footnotes_count].used = false;
+                        st->footnotes_count++;
+                    }
+                }
+            }
+        }
+    }
+}
+
+static bool is_footnote_def_line(const char *line) {
+    if (!line) return false;
+    while (*line == ' ' || *line == '\t') line++;
+    if (line[0] == '[' && line[1] == '^') {
+        const char *p = line + 2;
+        while (*p && *p != ']' && *p != ' ' && *p != '\t') p++;
+        if (*p == ']' && *(p + 1) == ':') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool is_html_block_line(const char *line) {
+    if (!line) return false;
+    while (*line == ' ' || *line == '\t') line++;
+    if (*line != '<') return false;
+    
+    static const char *block_tags[] = {
+        "details", "/details", "summary", "/summary",
+        "div", "/div", "table", "/table", "thead", "/thead",
+        "tbody", "/tbody", "tfoot", "/tfoot", "tr", "/tr",
+        "th", "/th", "td", "/td", "section", "/section",
+        "article", "/article", "header", "/header", "footer", "/footer",
+        "figure", "/figure", "figcaption", "/figcaption",
+        "video", "/video", "audio", "/audio", "iframe", "/iframe",
+        "form", "/form", "fieldset", "/fieldset", "script", "/script",
+        "style", "/style", "blockquote", "/blockquote", "nav", "/nav",
+        "aside", "/aside", "canvas", "/canvas", "h1", "/h1", "h2", "/h2",
+        "h3", "/h3", "h4", "/h4", "h5", "/h5", "h6", "/h6", "hr", "hr/", "hr /",
+        NULL
+    };
+    
+    const char *p = line + 1;
+    for (int t = 0; block_tags[t] != NULL; t++) {
+        size_t tlen = strlen(block_tags[t]);
+        if (ci_strncasecmp(p, block_tags[t], tlen) == 0) {
+            char next_c = p[tlen];
+            if (next_c == '>' || next_c == ' ' || next_c == '\t' || next_c == '/' || next_c == '\0') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static const char *replace_emoji_shortcode(const char *name) {
+    if (!name) return NULL;
+    if (strcmp(name, "rocket") == 0) return "🚀";
+    if (strcmp(name, "fire") == 0) return "🔥";
+    if (strcmp(name, "smile") == 0) return "😄";
+    if (strcmp(name, "heart") == 0) return "❤️";
+    if (strcmp(name, "thumbsup") == 0 || strcmp(name, "+1") == 0) return "👍";
+    if (strcmp(name, "thumbsdown") == 0 || strcmp(name, "-1") == 0) return "👎";
+    if (strcmp(name, "star") == 0) return "⭐";
+    if (strcmp(name, "check") == 0 || strcmp(name, "white_check_mark") == 0) return "✅";
+    if (strcmp(name, "x") == 0 || strcmp(name, "cross_mark") == 0) return "❌";
+    if (strcmp(name, "warning") == 0) return "⚠️";
+    if (strcmp(name, "bulb") == 0 || strcmp(name, "tip") == 0) return "💡";
+    if (strcmp(name, "tada") == 0 || strcmp(name, "party") == 0) return "🎉";
+    if (strcmp(name, "100") == 0) return "💯";
+    if (strcmp(name, "eyes") == 0) return "👀";
+    if (strcmp(name, "zap") == 0 || strcmp(name, "lightning") == 0) return "⚡";
+    if (strcmp(name, "memo") == 0 || strcmp(name, "pencil") == 0) return "📝";
+    if (strcmp(name, "sparkles") == 0) return "✨";
+    if (strcmp(name, "computer") == 0 || strcmp(name, "laptop") == 0) return "💻";
+    if (strcmp(name, "art") == 0 || strcmp(name, "palette") == 0) return "🎨";
+    return NULL;
 }
 
 
@@ -1304,6 +1426,35 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
             }
         }
         
+        if (text[i] == '[' && i + 1 < len && text[i + 1] == '^') {
+            size_t k = i + 2;
+            while (k < len && text[k] != ']' && text[k] != ' ' && text[k] != '\t' && text[k] != '\n') k++;
+            if (k < len && text[k] == ']') {
+                size_t label_len = k - (i + 2);
+                char *label = xstrdup_len(text + i + 2, label_len);
+                char *norm = normalize_label(label);
+                footnote_def_t *fn = NULL;
+                for (size_t f = 0; f < st->footnotes_count; f++) {
+                    if (st->footnotes[f].label_normalized && strcmp(st->footnotes[f].label_normalized, norm) == 0) {
+                        fn = &st->footnotes[f];
+                        break;
+                    }
+                }
+                free(norm);
+                if (fn) {
+                    fn->used = true;
+                    char fn_html[256];
+                    snprintf(fn_html, sizeof(fn_html), "<sup><a href=\"#fn-%s\" id=\"fnref-%s\" class=\"footnote-ref\">[%d]</a></sup>", label, label, fn->index);
+                    inline_token_t tok = {TOK_HTML_TAG, xstrdup(fn_html), strlen(fn_html), 0, false, false};
+                    insert_token_at(&tokens, &count, &cap, count, tok);
+                    free(label);
+                    i = k + 1;
+                    continue;
+                }
+                free(label);
+            }
+        }
+        
         if ((text[i] == '!' && i + 1 < len && text[i + 1] == '[') || text[i] == '[') {
             bool is_img = (text[i] == '!');
             char *link_html = NULL;
@@ -1313,6 +1464,47 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
                 insert_token_at(&tokens, &count, &cap, count, tok);
                 i = next_i;
                 continue;
+            }
+        }
+
+        if (text[i] == '$' && (i == 0 || text[i - 1] != '\\') && i + 1 < len && text[i + 1] != '$' && text[i + 1] != ' ') {
+            size_t close_math = i + 1;
+            while (close_math < len && text[close_math] != '$') {
+                if (text[close_math] == '\\' && close_math + 1 < len) close_math += 2;
+                else close_math++;
+            }
+            if (close_math < len && text[close_math] == '$' && text[close_math - 1] != ' ') {
+                size_t math_len = close_math - i + 1;
+                char *math_str = xstrdup_len(text + i, math_len);
+                char *escaped_m = xstrdup("");
+                escape_html_append(&escaped_m, math_str);
+                free(math_str);
+                char math_html[1024];
+                snprintf(math_html, sizeof(math_html), "<span class=\"math-inline\">%s</span>", escaped_m);
+                free(escaped_m);
+                inline_token_t tok = {TOK_HTML_TAG, xstrdup(math_html), strlen(math_html), 0, false, false};
+                insert_token_at(&tokens, &count, &cap, count, tok);
+                i = close_math + 1;
+                continue;
+            }
+        }
+
+        if (text[i] == ':' && i + 2 < len && isalpha((unsigned char)text[i + 1])) {
+            size_t end_colon = i + 1;
+            while (end_colon < len && (isalnum((unsigned char)text[end_colon]) || text[end_colon] == '_' || text[end_colon] == '+' || text[end_colon] == '-')) {
+                end_colon++;
+            }
+            if (end_colon < len && text[end_colon] == ':') {
+                size_t name_len = end_colon - (i + 1);
+                char *sname = xstrdup_len(text + i + 1, name_len);
+                const char *emoji = replace_emoji_shortcode(sname);
+                free(sname);
+                if (emoji) {
+                    inline_token_t tok = {TOK_TEXT, xstrdup(emoji), strlen(emoji), 0, false, false};
+                    insert_token_at(&tokens, &count, &cap, count, tok);
+                    i = end_colon + 1;
+                    continue;
+                }
             }
         }
         
@@ -1409,7 +1601,7 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
         
         size_t start = i;
         i++;
-        while (i < len && text[i] != '\\' && text[i] != '`' && text[i] != '[' && text[i] != '!' && text[i] != '*' && text[i] != '_' && text[i] != '\n' && text[i] != '<') {
+        while (i < len && text[i] != '\\' && text[i] != '`' && text[i] != '[' && text[i] != '!' && text[i] != '*' && text[i] != '_' && text[i] != '\n' && text[i] != '<' && text[i] != ':' && text[i] != '$') {
             i++;
         }
         char *raw = xstrdup_len(text + start, i - start);
@@ -2047,7 +2239,7 @@ static char *trim_paragraph_line(const char *line) {
    string that this function will NOT free. */
 static char *parse_block_html_with_state(const char *body_src, parser_state_t *st);
 
-static char *build_html_for_document(const char *src, size_t src_len, parser_state_t *st) {
+static char *build_html_for_document(const char *src, size_t src_len, parser_state_t *st, bool is_top_level) {
     (void)src_len;
     line_record_t *lines = NULL;
     size_t count = 0;
@@ -2058,6 +2250,7 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
     }
 
     parse_all_link_refs_from_lines(lines, count, st);
+    parse_all_footnotes_from_lines(lines, count, st);
 
     char *html = xstrdup("");
     size_t i = 0;
@@ -2066,6 +2259,157 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
         if (is_blank_line(line)) {
             i += 1;
             continue;
+        }
+
+        /* Frontmatter block at document start */
+        if (i == 0 && strcmp(line, "---") == 0) {
+            size_t end_fm = SIZE_MAX;
+            for (size_t k = 1; k < count; k++) {
+                if (strcmp(lines[k].text, "---") == 0 || strcmp(lines[k].text, "...") == 0) {
+                    end_fm = k;
+                    break;
+                }
+            }
+            if (end_fm != SIZE_MAX) {
+                append_str(&html, "<div class=\"frontmatter\">\n");
+                for (size_t f = 1; f < end_fm; f++) {
+                    char *escaped = xstrdup("");
+                    escape_html_append(&escaped, lines[f].text);
+                    append_str(&html, "<div class=\"frontmatter-line\">");
+                    append_str(&html, escaped);
+                    append_str(&html, "</div>\n");
+                    free(escaped);
+                }
+                append_str(&html, "</div>\n");
+                i = end_fm + 1;
+                continue;
+            }
+        }
+
+        /* Skip footnote definition lines in body */
+        if (is_footnote_def_line(line)) {
+            i += 1;
+            continue;
+        }
+
+        /* Summary tag with inline markdown */
+        if (strncmp(line, "<summary>", 9) == 0) {
+            const char *end_sum = strstr(line, "</summary>");
+            if (end_sum) {
+                char *inner = xstrdup_len(line + 9, end_sum - (line + 9));
+                char *formatted = render_inline_fragment(inner, src, lines[i].offset + 9, st);
+                append_str(&html, "<summary>");
+                append_str(&html, formatted ? formatted : inner);
+                append_str(&html, "</summary>\n");
+                free(formatted);
+                free(inner);
+                i += 1;
+                continue;
+            }
+        }
+
+        /* Raw Block HTML tags (details, summary, div, table, etc.) */
+        if (is_html_block_line(line)) {
+            append_str(&html, line);
+            append_str(&html, "\n");
+            i += 1;
+            continue;
+        }
+
+        /* Math Block: $$ ... $$ */
+        if (strncmp(line, "$$", 2) == 0) {
+            char *math_content = xstrdup("");
+            const char *after = line + 2;
+            const char *close_p = strstr(after, "$$");
+            if (close_p && close_p > after) {
+                char *inner = xstrdup_len(after, close_p - after);
+                append_str(&math_content, inner);
+                free(inner);
+                i += 1;
+            } else {
+                if (*after != '\0') {
+                    append_str(&math_content, after);
+                    append_str(&math_content, "\n");
+                }
+                i += 1;
+                while (i < count) {
+                    char *cur = lines[i].text;
+                    const char *end_m = strstr(cur, "$$");
+                    if (end_m) {
+                        char *inner = xstrdup_len(cur, end_m - cur);
+                        append_str(&math_content, inner);
+                        free(inner);
+                        i += 1;
+                        break;
+                    }
+                    append_str(&math_content, cur);
+                    append_str(&math_content, "\n");
+                    i += 1;
+                }
+            }
+            char *escaped_math = xstrdup("");
+            escape_html_append(&escaped_math, math_content);
+            append_str(&html, "<div class=\"math-block\">$$\n");
+            append_str(&html, escaped_math);
+            if (escaped_math[0] != '\0' && escaped_math[strlen(escaped_math) - 1] != '\n') {
+                append_str(&html, "\n");
+            }
+            append_str(&html, "$$</div>\n");
+            free(escaped_math);
+            free(math_content);
+            continue;
+        }
+
+        /* Definition List: term followed by : definition */
+        if (i + 1 < count) {
+            const char *next_l = lines[i + 1].text;
+            while (*next_l == ' ' || *next_l == '\t') next_l++;
+            if (next_l[0] == ':' && (next_l[1] == ' ' || next_l[1] == '\t')) {
+                append_str(&html, "<dl>\n");
+                while (i < count) {
+                    char *term = lines[i].text;
+                    if (is_blank_line(term)) break;
+                    if (i + 1 >= count) break;
+                    char *def_line = lines[i + 1].text;
+                    while (*def_line == ' ' || *def_line == '\t') def_line++;
+                    if (def_line[0] != ':' || (def_line[1] != ' ' && def_line[1] != '\t')) {
+                        break;
+                    }
+                    def_line += 2;
+                    while (*def_line == ' ' || *def_line == '\t') def_line++;
+
+                    char *term_html = render_inline_fragment(term, src, lines[i].offset, st);
+                    char *def_html = render_inline_fragment(def_line, src, lines[i + 1].offset, st);
+
+                    append_str(&html, "<dt>");
+                    append_str(&html, term_html ? term_html : "");
+                    append_str(&html, "</dt>\n");
+
+                    append_str(&html, "<dd>");
+                    append_str(&html, def_html ? def_html : "");
+                    append_str(&html, "</dd>\n");
+
+                    free(term_html);
+                    free(def_html);
+                    i += 2;
+
+                    size_t next_i = i;
+                    while (next_i < count && is_blank_line(lines[next_i].text)) {
+                        next_i++;
+                    }
+                    if (next_i < count && next_i + 1 < count) {
+                        const char *peek_def = lines[next_i + 1].text;
+                        while (*peek_def == ' ' || *peek_def == '\t') peek_def++;
+                        if (peek_def[0] == ':' && (peek_def[1] == ' ' || peek_def[1] == '\t')) {
+                            i = next_i;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                append_str(&html, "</dl>\n");
+                continue;
+            }
         }
 
         /* Table Block */
@@ -2449,12 +2793,6 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                     break;
                 }
                 if (is_blank) {
-                    /* Blank line: check if next line continues with > */
-                    if (i + 1 < count && starts_blockquote(lines[i + 1].text)) {
-                        if (!first_bq_line) append_str(&quote_body, "\n");
-                        i++;
-                        continue;
-                    }
                     break;
                 }
                 /* Strip leading spaces and '>' */
@@ -2468,7 +2806,51 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 first_bq_line = false;
                 i++;
             }
-            /* Recursively parse the blockquote body */
+            /* Check for GitHub-Style Alerts: [!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION] */
+            const char *alert_type = NULL;
+            const char *alert_title = NULL;
+            const char *alert_icon = NULL;
+            const char *body_p = quote_body;
+            while (*body_p == ' ' || *body_p == '\t') body_p++;
+
+            if (ci_strncasecmp(body_p, "[!NOTE]", 7) == 0) {
+                alert_type = "note"; alert_title = "Note"; alert_icon = "ℹ";
+                body_p += 7;
+            } else if (ci_strncasecmp(body_p, "[!TIP]", 6) == 0) {
+                alert_type = "tip"; alert_title = "Tip"; alert_icon = "💡";
+                body_p += 6;
+            } else if (ci_strncasecmp(body_p, "[!IMPORTANT]", 12) == 0) {
+                alert_type = "important"; alert_title = "Important"; alert_icon = "💬";
+                body_p += 12;
+            } else if (ci_strncasecmp(body_p, "[!WARNING]", 10) == 0) {
+                alert_type = "warning"; alert_title = "Warning"; alert_icon = "⚠️";
+                body_p += 10;
+            } else if (ci_strncasecmp(body_p, "[!CAUTION]", 10) == 0) {
+                alert_type = "caution"; alert_title = "Caution"; alert_icon = "🛑";
+                body_p += 10;
+            }
+
+            if (alert_type) {
+                while (*body_p == ' ' || *body_p == '\t' || *body_p == '\r') body_p++;
+                if (*body_p == '\n') body_p++;
+                while (*body_p == ' ' || *body_p == '\t' || *body_p == '\r' || *body_p == '\n') body_p++;
+
+                char *inner_html = parse_block_html_with_state(body_p, st);
+                free(quote_body);
+                if (!inner_html) {
+                    free_lines(lines, count);
+                    free(html);
+                    return NULL;
+                }
+                append_formatted(&html, "<div class=\"markdown-alert markdown-alert-%s\">\n", alert_type);
+                append_formatted(&html, "<p class=\"markdown-alert-title\"><span class=\"alert-icon\">%s</span> %s</p>\n", alert_icon, alert_title);
+                append_str(&html, inner_html);
+                append_str(&html, "</div>\n");
+                free(inner_html);
+                continue;
+            }
+
+            /* Recursively parse standard blockquote body */
             char *inner_html = parse_block_html_with_state(quote_body, st);
             free(quote_body);
             if (!inner_html) {
@@ -2531,7 +2913,8 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                 }
             }
             if (match_horizontal_rule(current_line) || match_heading(current_line, &heading_level, NULL) ||
-                starts_code_fence(current_line) || match_list_item_can_interrupt_paragraph(current_line) || starts_blockquote(current_line)) {
+                starts_code_fence(current_line) || match_list_item_can_interrupt_paragraph(current_line) || starts_blockquote(current_line) ||
+                is_html_block_line(current_line) || is_footnote_def_line(current_line) || strncmp(current_line, "$$", 2) == 0) {
                 break;
             }
             char *line_text = trim_paragraph_line(current_line);
@@ -2575,6 +2958,25 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
         free(formatted);
     }
 
+    if (is_top_level && st->footnotes_count > 0) {
+        bool has_used = false;
+        for (size_t f = 0; f < st->footnotes_count; f++) {
+            if (st->footnotes[f].used) { has_used = true; break; }
+        }
+        if (has_used) {
+            append_str(&html, "<section class=\"footnotes\">\n<hr />\n<ol class=\"footnotes-list\">\n");
+            for (size_t f = 0; f < st->footnotes_count; f++) {
+                if (st->footnotes[f].used) {
+                    char *formatted_content = render_inline_fragment(st->footnotes[f].content, src, 0, st);
+                    append_formatted(&html, "<li id=\"fn-%s\"><p>%s <a href=\"#fnref-%s\" class=\"footnote-backref\">&#x21a9;&#xfe0e;</a></p></li>\n",
+                                     st->footnotes[f].label, formatted_content ? formatted_content : "", st->footnotes[f].label);
+                    free(formatted_content);
+                }
+            }
+            append_str(&html, "</ol>\n</section>\n");
+        }
+    }
+
     free_lines(lines, count);
     if (st->has_error) {
         free(html);
@@ -2594,7 +2996,7 @@ static char *parse_block_html_with_state(const char *body_src, parser_state_t *s
        for sub-documents. Just call build_html_for_document with body as standalone src. */
     (void)saved_src; (void)saved_len;
     size_t blen = strlen(body_src);
-    char *result = build_html_for_document(body_src, blen, st);
+    char *result = build_html_for_document(body_src, blen, st, false);
     return result ? result : xstrdup("");
 }
 
@@ -2614,16 +3016,22 @@ md_parse_result_t md_to_html(const char *md_src, size_t md_len) {
     st.src_len = md_len;
 
     
-    st.html = build_html_for_document(st.src, st.src_len, &st);
+    st.html = build_html_for_document(st.src, st.src_len, &st, true);
 
-    // Cleanup references table helper macro/code
+    // Cleanup references and footnotes table helper macro/code
 #define CLEANUP_REFS \
     for (size_t i = 0; i < st.refs_count; i++) { \
         free(st.refs[i].label_normalized); \
         free(st.refs[i].url); \
         free(st.refs[i].title); \
     } \
-    free(st.refs);
+    free(st.refs); \
+    for (size_t i = 0; i < st.footnotes_count; i++) { \
+        free(st.footnotes[i].label); \
+        free(st.footnotes[i].label_normalized); \
+        free(st.footnotes[i].content); \
+    } \
+    free(st.footnotes);
 
     if (st.has_error) {
         result.success = false;

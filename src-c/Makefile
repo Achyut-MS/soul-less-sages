@@ -1,14 +1,14 @@
 CC := gcc
-DEVNULL := /dev/null
-EXE :=
-NET_LIBS :=
-RM = rm -f
-
 ifeq ($(OS),Windows_NT)
 	DEVNULL := NUL
 	EXE := .exe
 	NET_LIBS := -lws2_32 -lshell32
-	RM = powershell -Command "\"$(OBJS) $(TARGET) mdview_single$(EXE) ../tests/test_parser$(EXE)\" -split ' ' | ForEach-Object { if ($$_) { Remove-Item -Force -ErrorAction SilentlyContinue $$_ } }"
+	CLEAN_CMD := powershell -Command "\"$(OBJS) $(TARGET) mdview_single$(EXE) ../tests/test_parser$(EXE)\" -split ' ' | ForEach-Object { if ($$_) { Remove-Item -Force -ErrorAction SilentlyContinue $$_ } }"
+else
+	DEVNULL := /dev/null
+	EXE :=
+	NET_LIBS :=
+	CLEAN_CMD := rm -f $(OBJS) $(TARGET) mdview_single$(EXE) ../tests/test_parser$(EXE)
 endif
 
 STD := c23
@@ -42,4 +42,4 @@ mdview_single$(EXE): mdview_single.c $(SRCS)
 	$(CC) $(CFLAGS) mdview_single.c -o $@ $(NET_LIBS)
 
 clean:
-	-$(RM)
+	-$(CLEAN_CMD)

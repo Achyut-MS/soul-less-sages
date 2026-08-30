@@ -13,4 +13,5 @@
 #include "html_serializer.c"
 #include "file_writer.c"
 #include "http.c"
+#include "logger.c"
 #include "main.c"

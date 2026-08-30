@@ -117,6 +117,8 @@ typedef struct ser_node_t {
     struct ser_node_t *prev_sibling;
     bool has_closing_tag;
     char *raw_tag;  /* original-case tag name for unknown tags */
+    char *raw_open_tag;
+    char *raw_close_tag;
 } ser_node_t;
 
 static ser_node_t *ser_node_new(ser_node_type_t type) {
@@ -160,6 +162,8 @@ static void ser_node_free(ser_node_t *node) {
     }
     if (node->tag) free(node->tag);
     if (node->raw_tag) free(node->raw_tag);
+    if (node->raw_open_tag) free(node->raw_open_tag);
+    if (node->raw_close_tag) free(node->raw_close_tag);
     if (node->text) free(node->text);
     if (node->attrs) ser_attr_free_list(node->attrs);
     free(node);
@@ -183,8 +187,14 @@ static void ser_node_add_attr(ser_node_t *node, const char *name, const char *va
     } else {
         a->value = NULL;
     }
-    a->next = node->attrs;
-    node->attrs = a;
+    a->next = NULL;
+    if (!node->attrs) {
+        node->attrs = a;
+    } else {
+        ser_attr_t *curr = node->attrs;
+        while (curr->next) curr = curr->next;
+        curr->next = a;
+    }
 }
 
 static int ser_strcasecmp(const char *s1, const char *s2) {
@@ -368,6 +378,7 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
 
             /* Closing Tag: </tag> */
             if (i + 1 < len && html[i + 1] == '/') {
+                size_t close_start = i;
                 size_t tag_start = i + 2;
                 while (tag_start < len && isspace((unsigned char)html[tag_start])) tag_start++;
                 size_t tag_end = tag_start;
@@ -382,25 +393,36 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
                 }
                 tag_buf[tlen] = '\0';
 
+                /* Skip to '>' */
+                size_t end = tag_end;
+                while (end < len && html[end] != '>') end++;
+                size_t close_end = (end < len) ? end + 1 : len;
+                size_t close_len = close_end - close_start;
+
                 /* Find matching open ancestor */
                 ser_node_t *scan = curr;
                 while (scan && scan != root) {
                     if (scan->tag && ser_strcasecmp(scan->tag, tag_buf) == 0) {
                         scan->has_closing_tag = true;
+                        if (!scan->raw_close_tag && close_len > 0) {
+                            scan->raw_close_tag = (char *)malloc(close_len + 1);
+                            if (scan->raw_close_tag) {
+                                memcpy(scan->raw_close_tag, html + close_start, close_len);
+                                scan->raw_close_tag[close_len] = '\0';
+                            }
+                        }
                         curr = scan->parent ? scan->parent : root;
                         break;
                     }
                     scan = scan->parent;
                 }
 
-                /* Skip to '>' */
-                size_t end = tag_end;
-                while (end < len && html[end] != '>') end++;
-                i = (end < len) ? end + 1 : len;
+                i = close_end;
                 continue;
             }
 
             /* Opening Tag: <tag attr="val"...> */
+            size_t open_start = i;
             size_t tag_start = i + 1;
             while (tag_start < len && isspace((unsigned char)html[tag_start])) tag_start++;
             if (tag_start < len && (isalnum((unsigned char)html[tag_start]))) {
@@ -494,6 +516,12 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
                 }
 
                 if (attr_pos < len && html[attr_pos] == '>') attr_pos++;
+                size_t open_len = attr_pos - open_start;
+                elem->raw_open_tag = (char *)malloc(open_len + 1);
+                if (elem->raw_open_tag) {
+                    memcpy(elem->raw_open_tag, html + open_start, open_len);
+                    elem->raw_open_tag[open_len] = '\0';
+                }
                 i = attr_pos;
 
                 /* Attach element to current DOM node */
@@ -567,6 +595,36 @@ static void ser_render_to_buffer(ser_node_t *node, ser_builder_t *buf, ser_ctx_t
     }
 }
 
+static void ser_emit_destination(ser_builder_t *out, const char *url) {
+    if (!out || !url) return;
+    for (size_t i = 0; url[i] != '\0'; i++) {
+        char c = url[i];
+        if (c == '(') {
+            ser_builder_append(out, "\\(");
+        } else if (c == ')') {
+            ser_builder_append(out, "\\)");
+        } else if (c == '\\') {
+            ser_builder_append(out, "\\\\");
+        } else {
+            ser_builder_append_char(out, c);
+        }
+    }
+}
+
+static void ser_emit_title(ser_builder_t *out, const char *title) {
+    if (!out || !title) return;
+    for (size_t i = 0; title[i] != '\0'; i++) {
+        char c = title[i];
+        if (c == '"') {
+            ser_builder_append(out, "\\\"");
+        } else if (c == '\\') {
+            ser_builder_append(out, "\\\\");
+        } else {
+            ser_builder_append_char(out, c);
+        }
+    }
+}
+
 static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_t *ctx) {
     if (!out || !text) return;
     if (ctx->in_code || ctx->in_pre) {
@@ -603,16 +661,23 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
                 ser_builder_append(out, "\\\\");
                 break;
             case '#':
-                /* Only escape # at line start when followed by space or another # (ATX heading) */
-                if (is_line_start && i + 1 < len && (text[i + 1] == ' ' || text[i + 1] == '#')) {
+                /* ATX heading rule: '#' at line start followed by space, tab,
+                 * another '#', or end of line (including end of the text
+                 * node / a literal newline) all start a heading, so all of
+                 * those must be escaped, not just the space/'#' cases. */
+                if (is_line_start &&
+                    (i + 1 >= len || text[i + 1] == ' ' || text[i + 1] == '\t' ||
+                     text[i + 1] == '#' || text[i + 1] == '\n')) {
                     ser_builder_append(out, "\\#");
                 } else {
                     ser_builder_append_char(out, c);
                 }
                 break;
             case '>':
-                /* Only escape > at line start when followed by space (blockquote) */
-                if (is_line_start && i + 1 < len && text[i + 1] == ' ') {
+                /* Any '>' at line start starts a blockquote per CommonMark
+                 * (the space after '>' is optional), so it must always be
+                 * escaped here regardless of what follows. */
+                if (is_line_start) {
                     ser_builder_append(out, "\\>");
                 } else {
                     ser_builder_append_char(out, c);
@@ -785,6 +850,9 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Bold / Strong */
     if (strcmp(tag, "strong") == 0 || strcmp(tag, "b") == 0) {
+        if (node->attrs != NULL) {
+            goto raw_html_fallback;
+        }
         if (ctx->em_level > 0 && ctx->strong_level == 0) {
             /* Inside em: use *** for combined bold-italic, or raw if already nested */
             ser_builder_append(out, "**");
@@ -807,6 +875,9 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Italic / Emphasis */
     if (strcmp(tag, "em") == 0 || strcmp(tag, "i") == 0) {
+        if (node->attrs != NULL) {
+            goto raw_html_fallback;
+        }
         if (ctx->strong_level > 0 && ctx->em_level == 0) {
             /* Inside strong: use * for italic portion */
             ser_builder_append(out, "*");
@@ -829,6 +900,9 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Inline Code */
     if (strcmp(tag, "code") == 0 && !ctx->in_pre) {
+        if (node->attrs != NULL) {
+            goto raw_html_fallback;
+        }
         ser_builder_append(out, "`");
         bool prev_in_code = ctx->in_code;
         ctx->in_code = true;
@@ -952,6 +1026,11 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Ordered List: <ol> (Sequentially Renumbered) */
     if (strcmp(tag, "ol") == 0) {
+        const char *cls = ser_node_get_attr(node, "class");
+        if (cls && strcmp(cls, "footnotes-list") == 0) {
+            ser_walk_children(node, out, ctx);
+            return;
+        }
         if (out->len > 0 && out->data[out->len - 1] != '\n') {
             ser_builder_append_char(out, '\n');
         }
@@ -1057,10 +1136,29 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
     if (strcmp(tag, "a") == 0) {
         const char *href = ser_node_get_attr(node, "href");
         if (href) {
+            bool has_other_attrs = false;
+            ser_attr_t *at = node->attrs;
+            while (at) {
+                if (at->name && ser_strcasecmp(at->name, "href") != 0 && ser_strcasecmp(at->name, "title") != 0) {
+                    has_other_attrs = true;
+                    break;
+                }
+                at = at->next;
+            }
+            if (has_other_attrs) {
+                goto raw_html_fallback;
+            }
+
             ser_builder_append_char(out, '[');
             ser_walk_children(node, out, ctx);
             ser_builder_append(out, "](");
-            ser_builder_append(out, href);
+            ser_emit_destination(out, href);
+            const char *title = ser_node_get_attr(node, "title");
+            if (title && title[0] != '\0') {
+                ser_builder_append(out, " \"");
+                ser_emit_title(out, title);
+                ser_builder_append_char(out, '"');
+            }
             ser_builder_append_char(out, ')');
             return;
         }
@@ -1070,11 +1168,32 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
     if (strcmp(tag, "img") == 0) {
         const char *src = ser_node_get_attr(node, "src");
         if (src) {
+            bool has_other_attrs = false;
+            ser_attr_t *at = node->attrs;
+            while (at) {
+                if (at->name && ser_strcasecmp(at->name, "src") != 0 &&
+                    ser_strcasecmp(at->name, "alt") != 0 &&
+                    ser_strcasecmp(at->name, "title") != 0) {
+                    has_other_attrs = true;
+                    break;
+                }
+                at = at->next;
+            }
+            if (has_other_attrs) {
+                goto raw_html_fallback;
+            }
+
             const char *alt = ser_node_get_attr(node, "alt");
             ser_builder_append(out, "![");
             if (alt) ser_builder_append(out, alt);
             ser_builder_append(out, "](");
-            ser_builder_append(out, src);
+            ser_emit_destination(out, src);
+            const char *title = ser_node_get_attr(node, "title");
+            if (title && title[0] != '\0') {
+                ser_builder_append(out, " \"");
+                ser_emit_title(out, title);
+                ser_builder_append_char(out, '"');
+            }
             ser_builder_append_char(out, ')');
             return;
         }
@@ -1176,36 +1295,222 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
         return;
     }
 
+    /* Frontmatter, Alerts, Math Block in <div> */
+    if (strcmp(tag, "div") == 0) {
+        const char *cls = ser_node_get_attr(node, "class");
+        if (cls && strcmp(cls, "frontmatter") == 0) {
+            ser_builder_append(out, "---\n");
+            ser_node_t *child = node->first_child;
+            while (child) {
+                if (child->type == SER_NODE_ELEMENT && child->first_child && child->first_child->text) {
+                    ser_builder_append(out, child->first_child->text);
+                    ser_builder_append_char(out, '\n');
+                }
+                child = child->next_sibling;
+            }
+            ser_builder_append(out, "---\n\n");
+            return;
+        }
+        if (cls && strncmp(cls, "markdown-alert", 14) == 0) {
+            const char *type = "NOTE";
+            if (strstr(cls, "tip")) type = "TIP";
+            else if (strstr(cls, "important")) type = "IMPORTANT";
+            else if (strstr(cls, "warning")) type = "WARNING";
+            else if (strstr(cls, "caution")) type = "CAUTION";
+            ser_builder_append(out, "> [!");
+            ser_builder_append(out, type);
+            ser_builder_append(out, "]\n");
+            ser_node_t *child = node->first_child;
+            while (child) {
+                const char *ccls = ser_node_get_attr(child, "class");
+                if (ccls && strcmp(ccls, "markdown-alert-title") == 0) {
+                    child = child->next_sibling;
+                    continue;
+                }
+                ser_builder_t *cbuf = ser_builder_new(128);
+                if (cbuf) {
+                    ser_walk_node(child, cbuf, ctx);
+                    size_t start = 0;
+                    for (size_t k = 0; k <= cbuf->len; k++) {
+                        if (k == cbuf->len || cbuf->data[k] == '\n') {
+                            if (k > start) {
+                                ser_builder_append(out, "> ");
+                                ser_builder_append_len(out, cbuf->data + start, k - start);
+                                ser_builder_append_char(out, '\n');
+                            }
+                            start = k + 1;
+                        }
+                    }
+                    ser_builder_free(cbuf);
+                }
+                child = child->next_sibling;
+            }
+            if (!ctx->tight_list) ser_builder_append_char(out, '\n');
+            return;
+        }
+        if (cls && strcmp(cls, "math-block") == 0) {
+            ser_node_t *child = node->first_child;
+            while (child) {
+                if (child->type == SER_NODE_TEXT && child->text) {
+                    ser_builder_append(out, child->text);
+                }
+                child = child->next_sibling;
+            }
+            ser_builder_append(out, "\n\n");
+            return;
+        }
+    }
+
+    /* Math Inline in <span> */
+    if (strcmp(tag, "span") == 0) {
+        const char *cls = ser_node_get_attr(node, "class");
+        if (cls && strcmp(cls, "math-inline") == 0) {
+            ser_node_t *child = node->first_child;
+            while (child) {
+                if (child->type == SER_NODE_TEXT && child->text) {
+                    ser_builder_append(out, child->text);
+                }
+                child = child->next_sibling;
+            }
+            return;
+        }
+    }
+
+    /* Footnote reference in <sup> */
+    if (strcmp(tag, "sup") == 0) {
+        ser_node_t *child = node->first_child;
+        if (child && child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "a") == 0) {
+            const char *cls = ser_node_get_attr(child, "class");
+            if (cls && strcmp(cls, "footnote-ref") == 0) {
+                const char *href = ser_node_get_attr(child, "href");
+                if (href && strncmp(href, "#fn-", 4) == 0) {
+                    ser_builder_append(out, "[^");
+                    ser_builder_append(out, href + 4);
+                    ser_builder_append(out, "]");
+                    return;
+                }
+            }
+        }
+    }
+
+    /* Footnotes section in <section> */
+    if (strcmp(tag, "section") == 0) {
+        const char *cls = ser_node_get_attr(node, "class");
+        if (cls && strcmp(cls, "footnotes") == 0) {
+            ser_node_t *child = node->first_child;
+            while (child) {
+                if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "ol") == 0) {
+                    ser_walk_children(child, out, ctx);
+                }
+                child = child->next_sibling;
+            }
+            return;
+        }
+    }
+
+    /* Footnote definition <li> in footnote list */
+    if (strcmp(tag, "li") == 0) {
+        const char *id = ser_node_get_attr(node, "id");
+        if (id && strncmp(id, "fn-", 3) == 0) {
+            ser_builder_append(out, "[^");
+            ser_builder_append(out, id + 3);
+            ser_builder_append(out, "]: ");
+            ser_builder_t *fbuf = ser_builder_new(128);
+            if (fbuf) {
+                ser_node_t *p_child = node->first_child;
+                while (p_child) {
+                    if (p_child->type == SER_NODE_ELEMENT && p_child->tag && strcmp(p_child->tag, "p") == 0) {
+                        ser_node_t *c = p_child->first_child;
+                        while (c) {
+                            const char *ccls = (c->type == SER_NODE_ELEMENT) ? ser_node_get_attr(c, "class") : NULL;
+                            if (ccls && strcmp(ccls, "footnote-backref") == 0) {
+                                c = c->next_sibling;
+                                continue;
+                            }
+                            ser_walk_node(c, fbuf, ctx);
+                            c = c->next_sibling;
+                        }
+                    } else {
+                        ser_walk_node(p_child, fbuf, ctx);
+                    }
+                    p_child = p_child->next_sibling;
+                }
+                while (fbuf->len > 0 && (fbuf->data[fbuf->len - 1] == ' ' || fbuf->data[fbuf->len - 1] == '\t' ||
+                                         fbuf->data[fbuf->len - 1] == '\n' || fbuf->data[fbuf->len - 1] == '\r')) {
+                    fbuf->data[--fbuf->len] = '\0';
+                }
+                ser_builder_append_len(out, fbuf->data, fbuf->len);
+                ser_builder_free(fbuf);
+            }
+            ser_builder_append(out, "\n");
+            return;
+        }
+    }
+
+    /* Definition list <dl> */
+    if (strcmp(tag, "dl") == 0) {
+        ser_node_t *child = node->first_child;
+        while (child) {
+            if (child->type == SER_NODE_ELEMENT && child->tag) {
+                if (strcmp(child->tag, "dt") == 0) {
+                    ser_walk_children(child, out, ctx);
+                    ser_builder_append_char(out, '\n');
+                } else if (strcmp(child->tag, "dd") == 0) {
+                    ser_builder_append(out, ": ");
+                    ser_walk_children(child, out, ctx);
+                    ser_builder_append(out, "\n\n");
+                }
+            }
+            child = child->next_sibling;
+        }
+        return;
+    }
+
 raw_html_fallback:
     /* Default: Treat all unrecognized tags (or fallbacks) as raw HTML tags to preserve them */
-    const char *emit_tag = (node->raw_tag && node->raw_tag[0]) ? node->raw_tag : tag;
-    ser_builder_append_char(out, '<');
-    ser_builder_append(out, emit_tag);
-    ser_attr_t *attr = node->attrs;
-    while (attr) {
-        ser_builder_append_char(out, ' ');
-        ser_builder_append(out, attr->name);
-        if (attr->value) {
-            ser_builder_append(out, "=\"");
-            ser_builder_append(out, attr->value);
-            ser_builder_append_char(out, '"');
-        }
-        attr = attr->next;
-    }
-    if (!node->has_closing_tag) {
-        ser_builder_append_char(out, '>');
+    if (node->raw_open_tag) {
+        ser_builder_append(out, node->raw_open_tag);
         ser_walk_children(node, out, ctx);
+        if (node->has_closing_tag) {
+            if (node->raw_close_tag) {
+                ser_builder_append(out, node->raw_close_tag);
+            } else {
+                const char *emit_tag = (node->raw_tag && node->raw_tag[0]) ? node->raw_tag : tag;
+                ser_builder_append(out, "</");
+                ser_builder_append(out, emit_tag);
+                ser_builder_append_char(out, '>');
+            }
+        }
     } else {
-        if (!node->first_child) {
-            ser_builder_append(out, "></");
-            ser_builder_append(out, emit_tag);
-            ser_builder_append_char(out, '>');
-        } else {
+        const char *emit_tag = (node->raw_tag && node->raw_tag[0]) ? node->raw_tag : tag;
+        ser_builder_append_char(out, '<');
+        ser_builder_append(out, emit_tag);
+        ser_attr_t *attr = node->attrs;
+        while (attr) {
+            ser_builder_append_char(out, ' ');
+            ser_builder_append(out, attr->name);
+            if (attr->value) {
+                ser_builder_append(out, "=\"");
+                ser_builder_append(out, attr->value);
+                ser_builder_append_char(out, '"');
+            }
+            attr = attr->next;
+        }
+        if (!node->has_closing_tag) {
             ser_builder_append_char(out, '>');
             ser_walk_children(node, out, ctx);
-            ser_builder_append(out, "</");
-            ser_builder_append(out, emit_tag);
-            ser_builder_append_char(out, '>');
+        } else {
+            if (!node->first_child) {
+                ser_builder_append(out, "></");
+                ser_builder_append(out, emit_tag);
+                ser_builder_append_char(out, '>');
+            } else {
+                ser_builder_append_char(out, '>');
+                ser_walk_children(node, out, ctx);
+                ser_builder_append(out, "</");
+                ser_builder_append(out, emit_tag);
+                ser_builder_append_char(out, '>');
+            }
         }
     }
 }
