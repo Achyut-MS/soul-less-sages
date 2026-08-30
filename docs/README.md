@@ -4,8 +4,11 @@
 > Zero Dependency Hackathon (zerodepshack.com) · Aug 28–31 2026 · 72h · stdlib-only  
 > **Target:** Native Windows & Linux Desktop Application (C23, zero third-party dependencies)
 
-### [🎬 Live Demo Video (Bidirectional Sync + Zero-Dependency Proof)](demo.webp)
-![Live Demo Video](demo.webp)
+### [🎬 Live Demo Video (Bidirectional Sync + Zero-Dependency Proof)](demo.mp4)
+
+<video src="demo.mp4" controls="controls" style="max-width: 100%;">
+  <a href="demo.mp4">🎬 Watch demo.mp4</a>
+</video>
 
 A zero-dependency desktop Markdown editor with **bidirectional sync**: edit the rendered preview and the source `.md` updates in real time — and vice versa. Built in pure C23 for Linux and Windows. Running the executable automatically launches the local desktop UI window with no Electron, no WebView2 NuGet packages, and no frameworks.
 
