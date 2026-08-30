@@ -456,20 +456,41 @@ textarea#markdown-source {
     user-select: none;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .header-btn {
     background: var(--accent);
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
     color: #ffffff;
     font-family: var(--font-sans);
     font-size: 13px;
+    font-weight: 500;
     padding: 6px 12px;
     cursor: pointer;
-    transition: background 0.12s;
+    transition: background 0.12s, border-color 0.12s, transform 0.08s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .header-btn:hover {
     background: var(--accent-hover);
+}
+
+.header-btn.secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.header-btn.secondary:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
 }
 
 /* ============================================================

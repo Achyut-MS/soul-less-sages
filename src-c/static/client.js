@@ -369,6 +369,13 @@ document.addEventListener('keydown', (e) => {
         zoomEditor(-0.1);
         return;
     }
+    /* Save / Download shortcut: Ctrl+S / Cmd+S */
+    if (isCtrl && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        downloadMarkdownFile();
+        return;
+    }
+
     if (isCtrl && e.key === '0') {
         e.preventDefault();
         setZoom(1.0);
@@ -552,3 +559,53 @@ uploadInput.addEventListener('change', async () => {
         showError(`Could not upload ${name}`);
     }
 });
+
+/* ============================================================
+ * Download Markdown File — export current content as a .md file
+ * ============================================================ */
+const downloadBtn = document.getElementById('download-file-btn');
+
+async function downloadMarkdownFile() {
+    let mdContent = sourceEl.value;
+
+    /* If user was editing live preview, sync preview to source first */
+    if (activeEditor === 'preview') {
+        try {
+            const res = await fetch('/serialize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: previewEl.innerHTML })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.md !== undefined) {
+                    mdContent = data.md;
+                    sourceEl.value = mdContent;
+                }
+            }
+        } catch (e) {
+            console.warn('Could not sync preview before download, using current source buffer', e);
+        }
+    }
+
+    let filename = (currentFileName || 'document.md').trim();
+    if (!filename) filename = 'document.md';
+    if (!/\.(md|markdown)$/i.test(filename)) {
+        filename += '.md';
+    }
+
+    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadMarkdownFile);
+}
+
