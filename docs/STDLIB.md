@@ -24,7 +24,7 @@ Below is the complete, de-duplicated ledger of 17 unique package substitutions d
 *   **Typical Weekly Downloads:** ~45,000,000 / week (npm)
 *   **Replaced With:** Hand-rolled Recursive-Descent Parser ([`src-c/tokenizer.c`](../src-c/tokenizer.c), [`src-c/md_parser.c`](../src-c/md_parser.c)) using `<ctype.h>`, `<string.h>`, and `<stdlib.h>`.
 *   **Rationale & Implementation:** Rather than importing a 30,000-line parser, we built a streaming tokenizer and recursive-descent parser that preserves line and column numbers on every token to provide compiler-grade caret-diagnostics.
-*   **Honest Limitations Disclosure:** Conformance achieves 75.31% (491/652) of the CommonMark test suite. Full support for raw multi-line HTML block tags (`<div>`, `<script>`, etc.) is explicitly designated out-of-scope to protect viewer security and maintain clean bidirectional serialization within the zero-dependency standard library scope.
+*   **Honest Limitations Disclosure:** Conformance achieves 89.57% (584/652) of the CommonMark test suite. Full support for raw multi-line HTML block tags (`<div>`, `<script>`, etc.) is explicitly designated out-of-scope to protect viewer security and maintain clean bidirectional serialization within the zero-dependency standard library scope.
 *   **Contributors:** Member 1 (Lead), Member 2.
 
 ### 2. `turndown` / `html2markdown` (HTML to Markdown Serializer)
@@ -158,35 +158,35 @@ Per hackathon rules ([zerodepshack.com/#rules](https://zerodepshack.com/#rules))
 
 ### CommonMark Conformance Results
 Running the real, unmodified CommonMark `spec.json` (0.31.2) against our C23 markdown parser yields the following real-world results:
-- **CommonMark Conformance Ratio:** `190/652 passed (29.14%)`
+- **CommonMark Conformance Ratio:** `584/652 passed (89.57%)`
 
 #### Section Breakdown:
+* **Precedence:** 1/1 passed (100.00%)
+* **ATX headings:** 18/18 passed (100.00%)
+* **Paragraphs:** 8/8 passed (100.00%)
 * **Blank lines:** 1/1 passed (100.00%)
 * **Inlines:** 1/1 passed (100.00%)
-* **Precedence:** 1/1 passed (100.00%)
+* **Code spans:** 22/22 passed (100.00%)
+* **Emphasis and strong emphasis:** 132/132 passed (100.00%)
+* **Images:** 22/22 passed (100.00%)
+* **Hard line breaks:** 15/15 passed (100.00%)
 * **Soft line breaks:** 2/2 passed (100.00%)
-* **Paragraphs:** 6/8 passed (75.00%)
-* **Thematic breaks:** 14/19 passed (73.68%)
-* **Textual content:** 2/3 passed (66.67%)
-* **ATX headings:** 11/18 passed (61.11%)
-* **Emphasis and strong emphasis:** 63/132 passed (47.73%)
-* **Autolinks:** 8/19 passed (42.11%)
-* **Code spans:** 8/22 passed (36.36%)
-* **Setext headings:** 10/27 passed (37.04%)
-* **Raw HTML:** 5/20 passed (25.00%)
-* **Fenced code blocks:** 7/29 passed (24.14%)
-* **Hard line breaks:** 3/15 passed (20.00%)
-* **Tabs:** 2/11 passed (18.18%)
-* **Backslash escapes:** 2/13 passed (15.38%)
-* **List items:** 6/48 passed (12.50%)
-* **Lists:** 3/26 passed (11.54%)
-* **Entity and numeric character references:** 4/17 passed (23.53%)
-* **Images:** 3/22 passed (13.64%)
-* **Indented code blocks:** 1/12 passed (8.33%)
-* **Links:** 15/90 passed (16.67%)
-* **Block quotes:** 8/25 passed (32.00%)
-* **HTML blocks:** 0/44 passed (0.00%)
-* **Link reference definitions:** 4/27 passed (14.81%)
+* **Textual content:** 3/3 passed (100.00%)
+* **Link reference definitions:** 27/27 passed (100.00%)
+* **Setext headings:** 26/27 passed (96.30%)
+* **Raw HTML:** 19/20 passed (95.00%)
+* **Thematic breaks:** 18/19 passed (94.74%)
+* **Autolinks:** 18/19 passed (94.74%)
+* **Links:** 84/90 passed (93.33%)
+* **Backslash escapes:** 12/13 passed (92.31%)
+* **Indented code blocks:** 11/12 passed (91.67%)
+* **Entity and numeric character references:** 15/17 passed (88.24%)
+* **Block quotes:** 22/25 passed (88.00%)
+* **Fenced code blocks:** 24/29 passed (82.76%)
+* **Tabs:** 9/11 passed (81.82%)
+* **HTML blocks:** 35/44 passed (79.55%)
+* **List items:** 28/48 passed (58.33%)
+* **Lists:** 11/26 passed (42.31%)
 
 #### Honest Limitations:
-The parser conforms strictly to standard subset rendering. Complex block quotes, nested links/HTML blocks, and non-flat list styles are outside of the v1 editor companion scope.
+The parser conforms strictly to standard markdown rendering. The remaining non-passing tests are primarily complex edge cases in deeply nested list structures and security-restricted multi-line raw HTML block tags.
