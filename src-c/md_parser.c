@@ -24,6 +24,7 @@ typedef struct {
     size_t error_col;
     link_ref_t *refs;
     size_t refs_count;
+    bool refs_initialized;
 } parser_state_t;
 
 typedef struct {
@@ -286,7 +287,7 @@ static const char *scan_destination(const char *p, const char *end, char **url_o
             buf[j++] = c;
             p++;
         }
-        if (j == 0) {
+        if (paren_depth != 0 || j == 0) {
             free(buf);
             return NULL;
         }
@@ -481,6 +482,8 @@ static size_t find_last_spanned_line(line_record_t *lines, size_t count, size_t 
 
 static void parse_all_link_refs_from_lines(line_record_t *lines, size_t count, parser_state_t *st) {
     if (!st || !st->src || count == 0) return;
+    if (st->refs_initialized) return;
+    st->refs_initialized = true;
     size_t cap = 8;
     st->refs = malloc(cap * sizeof(link_ref_t));
     st->refs_count = 0;
@@ -1165,6 +1168,7 @@ static char *render_autolink(const char *text, size_t len) {
     bool is_email = (strchr(url, '@') != NULL && strchr(url, ':') == NULL);
     if (is_email) {
         href = malloc(strlen(escaped_url) + 8);
+        if (!href) { free(url); free(escaped_url); return xstrdup(""); }
         sprintf(href, "mailto:%s", escaped_url);
     } else {
         href = xstrdup(escaped_url);
@@ -1174,6 +1178,7 @@ static char *render_autolink(const char *text, size_t len) {
     escape_html_append(&escaped_content, url);
     
     char *html = malloc(strlen(href) + strlen(escaped_content) + 16);
+    if (!html) { free(url); free(escaped_url); free(escaped_content); free(href); return xstrdup(""); }
     sprintf(html, "<a href=\"%s\">%s</a>", href, escaped_content);
     
     free(url);
@@ -1189,6 +1194,7 @@ static char *render_code_span(const char *text, size_t len, size_t op_len) {
     const char *content = text + op_len;
     
     char *temp = malloc(content_len + 1);
+    if (!temp) return xstrdup("");
     for (size_t k = 0; k < content_len; k++) {
         if (content[k] == '\n' || content[k] == '\r') {
             temp[k] = ' ';
@@ -1221,6 +1227,7 @@ static char *render_code_span(const char *text, size_t len, size_t op_len) {
     free(temp);
     
     char *html = malloc(strlen(escaped) + 15);
+    if (!html) { free(escaped); return xstrdup(""); }
     sprintf(html, "<code>%s</code>", escaped);
     free(escaped);
     return html;
@@ -1242,7 +1249,7 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
             }
             char next = text[i + 1];
             if (next == '\n') {
-                inline_token_t tok = {TOK_HTML_TAG, xstrdup("<br />\n"), 7, 0, false, false};
+                inline_token_t tok = {TOK_HTML_TAG, xstrdup("<br />"), 6, 0, false, false};
                 insert_token_at(&tokens, &count, &cap, count, tok);
                 i += 2;
                 continue;
@@ -1341,7 +1348,7 @@ static inline_token_t *tokenize_inline(const char *text, size_t len, parser_stat
                         to_strip = 0;
                     }
                 }
-                inline_token_t tok = {TOK_HTML_TAG, xstrdup("<br />\n"), 7, 0, false, false};
+                inline_token_t tok = {TOK_HTML_TAG, xstrdup("<br />"), 6, 0, false, false};
                 insert_token_at(&tokens, &count, &cap, count, tok);
             } else {
                 inline_token_t tok = {TOK_TEXT, xstrdup("\n"), 1, 0, false, false};
@@ -2029,10 +2036,7 @@ static char *render_inline_and_check(const char *text, const char *src, size_t b
 
 static char *trim_paragraph_line(const char *line) {
     if (!line) return NULL;
-    int spaces = 0;
-    while ((*line == ' ' || *line == '\t') && spaces < 3) {
-        if (*line == ' ') spaces++;
-        else spaces += 4 - (spaces % 4);
+    while (*line == ' ' || *line == '\t') {
         line++;
     }
     return xstrdup(line);
@@ -2307,8 +2311,9 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                         }
                         /* Check if this is a new list item or block marker */
                         bool ni_ordered = false; char ni_bc = 0;
-                        bool ni_is = match_list_item_full(next, &ni_ordered, NULL, NULL, &ni_bc, NULL, NULL);
-                        if (ni_is && ni_ordered == list_ordered) break;
+                        int ni_mi = 0;
+                        bool ni_is = match_list_item_full(next, &ni_ordered, &ni_mi, NULL, &ni_bc, NULL, NULL);
+                        if (ni_is && ni_ordered == list_ordered && ni_mi < content_indent) break;
                         if (match_heading(next, NULL, NULL) || match_horizontal_rule(next) ||
                             starts_code_fence(next) || starts_blockquote(next)) {
                             break;
@@ -2409,7 +2414,7 @@ static char *build_html_for_document(const char *src, size_t src_len, parser_sta
                     size_t ihlen = strlen(ih);
                     while (ihlen > 0 && (ih[ihlen-1] == '\n' || ih[ihlen-1] == '\r')) ihlen--;
                     ih[ihlen] = '\0';
-                    if (strncmp(ih, "<p>", 3) == 0 && ihlen >= 4 &&
+                    if (ihlen >= 4 && strncmp(ih, "<p>", 3) == 0 &&
                         strcmp(ih + ihlen - 4, "</p>") == 0) {
                         ih[ihlen - 4] = '\0';
                         append_str(&html, ih + 3);

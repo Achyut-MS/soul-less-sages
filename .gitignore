@@ -32,4 +32,20 @@ tests/*.tmp
 .vscode/
 .idea/
 .DS_Store
-Thumbs.db
+Thumbs.db# Fuzzer artifacts
+fuzz_fail_*.md
+fuzz_out*.txt
+fuzz_roundtrip*.exe
+*.exe
+hex_out.txt
+mdview_debug.log
+ol_out.txt
+out.txt
+test_md_out.txt
+print_*.c
+repro.c
+trace.c
+test.c
+test2.c
+test_md.c
+scratch/test_*.c

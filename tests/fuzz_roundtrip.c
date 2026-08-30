@@ -174,6 +174,16 @@ int main(int argc, char **argv) {
          */
         if (r1.html && r3.html && strcmp(r1.html, r3.html) != 0) {
             fprintf(stderr, "FUZZ FAILURE at cycle %llu: round-trip invariant violated\n", total_cycles);
+            
+            char fail_filename[64];
+            sprintf(fail_filename, "fuzz_fail_%llu.md", total_cycles);
+            FILE *f_fail = fopen(fail_filename, "wb");
+            if (f_fail) {
+                fwrite(mutated, 1, mut_len, f_fail);
+                fclose(f_fail);
+                fprintf(stderr, "  Raw input dumped to: %s\n", fail_filename);
+            }
+
             fprintf(stderr, "  Input:    [%.*s]\n", (int)(mut_len > 80 ? 80 : mut_len), mutated);
             fprintf(stderr, "  Pass 1:   [%.80s]\n", r1.html);
             fprintf(stderr, "  Pass 2:   [%.80s]\n", r3.html);

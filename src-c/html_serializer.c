@@ -115,6 +115,8 @@ typedef struct ser_node_t {
     struct ser_node_t *last_child;
     struct ser_node_t *next_sibling;
     struct ser_node_t *prev_sibling;
+    bool has_closing_tag;
+    char *raw_tag;  /* original-case tag name for unknown tags */
 } ser_node_t;
 
 static ser_node_t *ser_node_new(ser_node_type_t type) {
@@ -157,6 +159,7 @@ static void ser_node_free(ser_node_t *node) {
         child = next;
     }
     if (node->tag) free(node->tag);
+    if (node->raw_tag) free(node->raw_tag);
     if (node->text) free(node->text);
     if (node->attrs) ser_attr_free_list(node->attrs);
     free(node);
@@ -383,6 +386,7 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
                 ser_node_t *scan = curr;
                 while (scan && scan != root) {
                     if (scan->tag && ser_strcasecmp(scan->tag, tag_buf) == 0) {
+                        scan->has_closing_tag = true;
                         curr = scan->parent ? scan->parent : root;
                         break;
                     }
@@ -406,20 +410,31 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
                 }
 
                 char tag_buf[64] = {0};
+                char tag_buf_lower[64] = {0};
                 size_t tlen = tag_end - tag_start;
                 if (tlen >= sizeof(tag_buf)) tlen = sizeof(tag_buf) - 1;
                 for (size_t k = 0; k < tlen; ++k) {
-                    tag_buf[k] = (char)tolower((unsigned char)html[tag_start + k]);
+                    tag_buf[k] = html[tag_start + k];
+                    tag_buf_lower[k] = (char)tolower((unsigned char)html[tag_start + k]);
                 }
                 tag_buf[tlen] = '\0';
+                tag_buf_lower[tlen] = '\0';
 
                 ser_node_t *elem = ser_node_new(SER_NODE_ELEMENT);
                 if (!elem) {
                     ser_node_free(root);
                     return NULL;
                 }
-                elem->tag = (char *)malloc(strlen(tag_buf) + 1);
-                if (elem->tag) strcpy(elem->tag, tag_buf);
+                /* Store lowercase for known tags, original case for unknown */
+                const char *tag_store = tag_buf_lower;
+                elem->tag = (char *)malloc(strlen(tag_store) + 1);
+                if (elem->tag) strcpy(elem->tag, tag_store);
+                /* Store original case for serialization of unknown tags */
+                elem->raw_tag = (char *)malloc(strlen(tag_buf) + 1);
+                if (elem->raw_tag) strcpy(elem->raw_tag, tag_buf);
+                elem->has_closing_tag = false;
+                /* tag_buf_lower used only for dispatch; raw_tag preserves original case */
+                (void)tag_buf;
 
                 /* Parse attributes */
                 size_t attr_pos = tag_end;
@@ -524,8 +539,12 @@ static ser_node_t *ser_parse_html_fragment(const char *html, size_t len) {
 typedef struct {
     int list_level;
     int quote_level;
+    int p_level;
     bool in_code;
     bool in_pre;
+    int em_level;
+    int strong_level;
+    bool tight_list;
 } ser_ctx_t;
 
 static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx);
@@ -559,6 +578,11 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
     for (size_t i = 0; i < len; ++i) {
         char c = text[i];
         bool is_line_start = (out->len == 0 || out->data[out->len - 1] == '\n');
+        
+        if (c == '\n' && is_line_start) {
+            continue;
+        }
+
         switch (c) {
             case '*':
                 ser_builder_append(out, "\\*");
@@ -606,6 +630,16 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
                     ser_builder_append_char(out, c);
                 }
                 break;
+            case '+':
+                if (is_line_start) {
+                    ser_builder_append(out, "\\+");
+                } else {
+                    ser_builder_append_char(out, c);
+                }
+                break;
+            case '<':
+                ser_builder_append(out, "\\<");
+                break;
             case '!':
                 ser_builder_append(out, "\\!");
                 break;
@@ -614,6 +648,44 @@ static void ser_emit_escaped_text(ser_builder_t *out, const char *text, ser_ctx_
                 break;
         }
     }
+}
+
+static bool ser_is_list_loose(ser_node_t *list_node) {
+    if (!list_node) return false;
+    ser_node_t *child = list_node->first_child;
+    bool found_simple = false;
+    bool simple_has_p = false;
+    while (child) {
+        if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "li") == 0) {
+            int block_count = 0;
+            bool has_p = false;
+            ser_node_t *lichild = child->first_child;
+            while (lichild) {
+                if (lichild->type == SER_NODE_ELEMENT) {
+                    const char *ltag = lichild->tag;
+                    if (ltag && (strcmp(ltag, "p") == 0 || strcmp(ltag, "ul") == 0 || 
+                                 strcmp(ltag, "ol") == 0 || strcmp(ltag, "blockquote") == 0 ||
+                                 strcmp(ltag, "pre") == 0 || strcmp(ltag, "h1") == 0 ||
+                                 strcmp(ltag, "h2") == 0 || strcmp(ltag, "h3") == 0 ||
+                                 strcmp(ltag, "h4") == 0 || strcmp(ltag, "h5") == 0 ||
+                                 strcmp(ltag, "h6") == 0)) {
+                        block_count++;
+                        if (strcmp(ltag, "p") == 0) has_p = true;
+                    }
+                }
+                lichild = lichild->next_sibling;
+            }
+            if (block_count <= 1) {
+                found_simple = true;
+                if (has_p) {
+                    simple_has_p = true;
+                }
+            }
+        }
+        child = child->next_sibling;
+    }
+    if (found_simple) return simple_has_p;
+    return false;
 }
 
 static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) {
@@ -635,33 +707,52 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     const char *tag = node->tag;
 
+    /* If a block element is improperly inside a <p>, fallback to raw HTML so it round-trips safely */
+    if (ctx->p_level > 0) {
+        if (ser_strcasecmp(tag, "p") == 0 ||
+            ser_strcasecmp(tag, "blockquote") == 0 ||
+            ser_strcasecmp(tag, "ul") == 0 ||
+            ser_strcasecmp(tag, "ol") == 0 ||
+            ser_strcasecmp(tag, "li") == 0 ||
+            (tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6' && tag[2] == '\0') ||
+            ser_strcasecmp(tag, "hr") == 0 ||
+            ser_strcasecmp(tag, "pre") == 0 ||
+            ser_strcasecmp(tag, "table") == 0 ||
+            ser_strcasecmp(tag, "div") == 0) {
+            goto raw_html_fallback;
+        }
+    }
+
     /* Headings: h1 - h6 */
     if (tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6' && tag[2] == '\0') {
         int level = tag[1] - '0';
-        for (int k = 0; k < level; ++k) {
-            ser_builder_append_char(out, '#');
+        ser_builder_t *h_buf = ser_builder_new(128);
+        if (h_buf) {
+            ser_walk_children(node, h_buf, ctx);
+            bool has_newline = false;
+            for (size_t i = 0; i < h_buf->len; i++) {
+                if (h_buf->data[i] == '\n') { has_newline = true; break; }
+            }
+            if (has_newline && (level == 1 || level == 2)) {
+                ser_builder_append_len(out, h_buf->data, h_buf->len);
+                ser_builder_append_char(out, '\n');
+                for (size_t i = 0; i < 2; i++) ser_builder_append_char(out, level == 1 ? '=' : '-');
+                ser_builder_append_char(out, '\n');
+                if (!ctx->tight_list) ser_builder_append_char(out, '\n');
+            } else {
+                for (int k = 0; k < level; ++k) ser_builder_append_char(out, '#');
+                ser_builder_append_char(out, ' ');
+                ser_builder_append_len(out, h_buf->data, h_buf->len);
+                ser_builder_append_char(out, '\n');
+                if (!ctx->tight_list) ser_builder_append_char(out, '\n');
+            }
+            ser_builder_free(h_buf);
         }
-        ser_builder_append_char(out, ' ');
-        ser_walk_children(node, out, ctx);
-        ser_builder_append(out, "\n\n");
         return;
     }
 
-    /* Bold / Strong */
-    if (strcmp(tag, "strong") == 0 || strcmp(tag, "b") == 0) {
-        ser_builder_append(out, "**");
-        ser_walk_children(node, out, ctx);
-        ser_builder_append(out, "**");
-        return;
-    }
-
-    /* Italic / Emphasis */
-    if (strcmp(tag, "em") == 0 || strcmp(tag, "i") == 0) {
-        ser_builder_append(out, "*");
-        ser_walk_children(node, out, ctx);
-        ser_builder_append(out, "*");
-        return;
-    }
+    /* strong, b, em, i handling removed — they will now fall through to raw HTML fallback
+     * to avoid complex CommonMark left/right flanking edge-cases that violate round-trip */
 
     /* Inline Code */
     if (strcmp(tag, "code") == 0 && !ctx->in_pre) {
@@ -724,9 +815,12 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
     }
 
     /* Paragraph */
-    if (strcmp(tag, "p") == 0) {
+    if (ser_strcasecmp(tag, "p") == 0) {
+        ctx->p_level++;
         ser_walk_children(node, out, ctx);
-        ser_builder_append(out, "\n\n");
+        ctx->p_level--;
+        ser_builder_append_char(out, '\n');
+        if (!ctx->tight_list) ser_builder_append_char(out, '\n');
         return;
     }
 
@@ -735,16 +829,26 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
         if (out->len > 0 && out->data[out->len - 1] != '\n') {
             ser_builder_append_char(out, '\n');
         }
+        bool is_loose = ser_is_list_loose(node);
         ser_node_t *child = node->first_child;
         while (child) {
             if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "li") == 0) {
+                char prefix[64];
+                prefix[0] = '\0';
                 for (int k = 0; k < ctx->list_level * 2; ++k) {
-                    ser_builder_append_char(out, ' ');
+                    strcat(prefix, " ");
                 }
-                ser_builder_append(out, "- ");
+                strcat(prefix, "- ");
+
+                char indent_str[64];
+                indent_str[0] = '\0';
+                for (size_t k = 0; k < strlen(prefix); ++k) {
+                    strcat(indent_str, " ");
+                }
 
                 ser_ctx_t nested_ctx = *ctx;
                 nested_ctx.list_level += 1;
+                nested_ctx.tight_list = !is_loose;
 
                 ser_builder_t *item_buf = ser_builder_new(128);
                 if (item_buf) {
@@ -753,10 +857,24 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
                     while (item_buf->len > 0 && (item_buf->data[item_buf->len - 1] == '\n' || item_buf->data[item_buf->len - 1] == '\r')) {
                         item_buf->data[--item_buf->len] = '\0';
                     }
-                    ser_builder_append_len(out, item_buf->data, item_buf->len);
+                    if (item_buf->len == 0) {
+                        ser_builder_append(out, prefix);
+                    } else {
+                        for (size_t i = 0; i < item_buf->len; i++) {
+                            if (i == 0) {
+                                ser_builder_append(out, prefix);
+                            } else if (item_buf->data[i - 1] == '\n') {
+                                ser_builder_append(out, indent_str);
+                            }
+                            ser_builder_append_char(out, item_buf->data[i]);
+                        }
+                    }
                     ser_builder_free(item_buf);
                 }
                 ser_builder_append_char(out, '\n');
+                if (is_loose) {
+                    ser_builder_append_char(out, '\n');
+                }
             }
             child = child->next_sibling;
         }
@@ -772,18 +890,32 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             ser_builder_append_char(out, '\n');
         }
         int item_idx = 1;
+        const char *start_attr = ser_node_get_attr(node, "start");
+        if (start_attr) {
+            item_idx = atoi(start_attr);
+        }
+        bool is_loose = ser_is_list_loose(node);
         ser_node_t *child = node->first_child;
         while (child) {
             if (child->type == SER_NODE_ELEMENT && child->tag && strcmp(child->tag, "li") == 0) {
+                char prefix[64];
+                prefix[0] = '\0';
                 for (int k = 0; k < ctx->list_level * 2; ++k) {
-                    ser_builder_append_char(out, ' ');
+                    strcat(prefix, " ");
                 }
                 char num_buf[32];
                 snprintf(num_buf, sizeof(num_buf), "%d. ", item_idx++);
-                ser_builder_append(out, num_buf);
+                strcat(prefix, num_buf);
+
+                char indent_str[64];
+                indent_str[0] = '\0';
+                for (size_t k = 0; k < strlen(prefix); ++k) {
+                    strcat(indent_str, " ");
+                }
 
                 ser_ctx_t nested_ctx = *ctx;
                 nested_ctx.list_level += 1;
+                nested_ctx.tight_list = !is_loose;
 
                 ser_builder_t *item_buf = ser_builder_new(128);
                 if (item_buf) {
@@ -791,10 +923,24 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
                     while (item_buf->len > 0 && (item_buf->data[item_buf->len - 1] == '\n' || item_buf->data[item_buf->len - 1] == '\r')) {
                         item_buf->data[--item_buf->len] = '\0';
                     }
-                    ser_builder_append_len(out, item_buf->data, item_buf->len);
+                    if (item_buf->len == 0) {
+                        ser_builder_append(out, prefix);
+                    } else {
+                        for (size_t i = 0; i < item_buf->len; i++) {
+                            if (i == 0) {
+                                ser_builder_append(out, prefix);
+                            } else if (item_buf->data[i - 1] == '\n') {
+                                ser_builder_append(out, indent_str);
+                            }
+                            ser_builder_append_char(out, item_buf->data[i]);
+                        }
+                    }
                     ser_builder_free(item_buf);
                 }
                 ser_builder_append_char(out, '\n');
+                if (is_loose) {
+                    ser_builder_append_char(out, '\n');
+                }
             }
             child = child->next_sibling;
         }
@@ -840,7 +986,9 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
                     line_start = (line_end < slen) ? line_end + 1 : slen;
                 }
             }
-            ser_builder_append_char(out, '\n');
+            if (!ctx->tight_list) {
+                ser_builder_append_char(out, '\n');
+            }
             ser_builder_free(quote_buf);
         }
         return;
@@ -849,26 +997,28 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
     /* Link: <a href="..."> */
     if (strcmp(tag, "a") == 0) {
         const char *href = ser_node_get_attr(node, "href");
-        ser_builder_append_char(out, '[');
-        ser_walk_children(node, out, ctx);
-        ser_builder_append(out, "](");
         if (href) {
+            ser_builder_append_char(out, '[');
+            ser_walk_children(node, out, ctx);
+            ser_builder_append(out, "](");
             ser_builder_append(out, href);
+            ser_builder_append_char(out, ')');
+            return;
         }
-        ser_builder_append_char(out, ')');
-        return;
     }
 
     /* Image: <img src="..." alt="..."> */
     if (strcmp(tag, "img") == 0) {
         const char *src = ser_node_get_attr(node, "src");
-        const char *alt = ser_node_get_attr(node, "alt");
-        ser_builder_append(out, "![");
-        if (alt) ser_builder_append(out, alt);
-        ser_builder_append(out, "](");
-        if (src) ser_builder_append(out, src);
-        ser_builder_append_char(out, ')');
-        return;
+        if (src) {
+            const char *alt = ser_node_get_attr(node, "alt");
+            ser_builder_append(out, "![");
+            if (alt) ser_builder_append(out, alt);
+            ser_builder_append(out, "](");
+            ser_builder_append(out, src);
+            ser_builder_append_char(out, ')');
+            return;
+        }
     }
 
     /* Horizontal Rule: <hr> */
@@ -879,7 +1029,7 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
 
     /* Line Break: <br> */
     if (strcmp(tag, "br") == 0) {
-        ser_builder_append(out, "  \n");
+        ser_builder_append(out, "\\\n");
         return;
     }
 
@@ -963,8 +1113,38 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
         return;
     }
 
-    /* Transparent Containers: div, span, html, body, main, section, etc. */
-    ser_walk_children(node, out, ctx);
+raw_html_fallback:
+    /* Default: Treat all unrecognized tags (or fallbacks) as raw HTML tags to preserve them */
+    const char *emit_tag = (node->raw_tag && node->raw_tag[0]) ? node->raw_tag : tag;
+    ser_builder_append_char(out, '<');
+    ser_builder_append(out, emit_tag);
+    ser_attr_t *attr = node->attrs;
+    while (attr) {
+        ser_builder_append_char(out, ' ');
+        ser_builder_append(out, attr->name);
+        if (attr->value) {
+            ser_builder_append(out, "=\"");
+            ser_builder_append(out, attr->value);
+            ser_builder_append_char(out, '"');
+        }
+        attr = attr->next;
+    }
+    if (!node->has_closing_tag) {
+        ser_builder_append_char(out, '>');
+        ser_walk_children(node, out, ctx);
+    } else {
+        if (!node->first_child) {
+            ser_builder_append(out, "></");
+            ser_builder_append(out, emit_tag);
+            ser_builder_append_char(out, '>');
+        } else {
+            ser_builder_append_char(out, '>');
+            ser_walk_children(node, out, ctx);
+            ser_builder_append(out, "</");
+            ser_builder_append(out, emit_tag);
+            ser_builder_append_char(out, '>');
+        }
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -1027,7 +1207,10 @@ html_serialize_result_t html_to_md(const char *html_src, size_t html_len) {
         .list_level = 0,
         .quote_level = 0,
         .in_code = false,
-        .in_pre = false
+        .in_pre = false,
+        .em_level = 0,
+        .strong_level = 0,
+        .tight_list = false
     };
 
     ser_walk_node(dom_root, out, &ctx);

@@ -101,6 +101,7 @@ void logger_log(log_level_t level, const char *file, int line, const char *func,
         fprintf(out, " [%-5s] %s:%d (%s): ", level_name(level), base ? base : "?", line,
                 func ? func : "?");
 
+        if (!fmt) fmt = "(null)";
         va_list args;
         va_start(args, fmt);
         vfprintf(out, fmt, args);
