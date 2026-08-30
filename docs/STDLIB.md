@@ -18,7 +18,7 @@ In accordance with [zerodepshack.com/#zerodep](https://zerodepshack.com/#zerodep
 
 ## 2. STDLIB-for-Package Substitutions (Package Killer Ledger)
 
-Below is the complete, de-duplicated ledger of 15 unique package substitutions designed and implemented across all components.
+Below is the complete, de-duplicated ledger of 17 unique package substitutions designed and implemented across all components.
 
 ### 1. `marked` / `markdown-it` / `cmark` (Markdown Parser)
 *   **Typical Weekly Downloads:** ~45,000,000 / week (npm)
@@ -124,6 +124,20 @@ Below is the complete, de-duplicated ledger of 15 unique package substitutions d
 *   **Rationale & Implementation:** Direct codepoint math transforms entities (`&quot;`, `&#39;`, `&#x1F30D;`) into valid UTF-8 sequences without multi-megabyte Unicode database dependencies.
 *   **Honest Limitations Disclosure:** Esoteric named entities (e.g. `&therefore;`) pass through untouched.
 *   **Contributors:** Member 2 (Lead).
+
+### 16. `katex` / `mathjax` (Math Typesetting Engine)
+*   **Typical Weekly Downloads:** ~3,000,000 / week (npm)
+*   **Replaced With:** Hand-rolled Recursive-Descent LaTeX-to-MathML Converter ([`src-c/mathml.c`](../src-c/mathml.c)) emitting native browser `<math>` MathML DOM elements.
+*   **Rationale & Implementation:** Instead of bundling a 5MB JavaScript engine (KaTeX/MathJax) or pulling CDN scripts, we hand-rolled a C23 recursive-descent math parser in [`src-c/mathml.c`](../src-c/mathml.c) that converts LaTeX syntax (`$x^2$`, `\frac{a}{b}`, `\sqrt{x}`, Greek symbols, and math operators) directly into W3C MathML `<math>` tags, rendered natively by modern browsers (Chrome, Firefox, Safari) with zero client JavaScript.
+*   **Honest Limitations Disclosure:** Supports standard mathematical expressions (fractions, roots, superscripts, subscripts, Greek letters, common operators); arbitrary multi-line matrix environments (`\begin{matrix}`) and complex LaTeX macro expansions are designated out of scope for v1.
+*   **Contributors:** Member 1 (Lead), Member 2.
+
+### 17. `mermaid` / `viz.js` / `graphviz` (Diagram & Flowchart Engine)
+*   **Typical Weekly Downloads:** ~12,000,000 / week (npm)
+*   **Replaced With:** Hand-rolled Flowchart-to-SVG Layout Engine ([`src-c/mermaid_svg.c`](../src-c/mermaid_svg.c)) using pure C23 geometry calculations.
+*   **Rationale & Implementation:** Replaced the heavy D3/dagre-based Mermaid.js runtime with a pure C BFS topological level-assignment and coordinate layout generator that emits clean `<svg class="mermaid-diagram">` with rectangles, rounded boxes, diamonds, and labeled vector connectors.
+*   **Honest Limitations Disclosure:** Scoped strictly to linear and branching flowcharts (`graph TD/LR/RL` and `flowchart TD/LR/RL`); class diagrams, sequence diagrams, state machines, and Gantt charts are designated out of scope for v1.
+*   **Contributors:** Member 1 (Lead).
 
 ---
 

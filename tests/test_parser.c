@@ -263,18 +263,57 @@ bool test_parser_math_equations(void) {
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<span class=\"math-inline\">$E = mc^2$</span>") != NULL);
-    ASSERT_TRUE(strstr(res.html, "<div class=\"math-block\">") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<math>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<msup>") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<math display=\"block\">") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<mfrac>") != NULL);
     md_parse_result_free(&res);
     return true;
 }
 
 bool test_parser_mermaid(void) {
-    const char *md = "```mermaid\nflowchart TD\n    A --> B\n```\n";
+    const char *md = "```mermaid\nflowchart TD\n    A([Start]) --> B{Decision}\n```\n";
     md_parse_result_t res = md_to_html(md, strlen(md));
     ASSERT_TRUE(res.success);
     ASSERT_NOT_NULL(res.html);
-    ASSERT_TRUE(strstr(res.html, "<pre><code class=\"language-mermaid\">") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<div class=\"mermaid\"") != NULL);
+    ASSERT_TRUE(strstr(res.html, "<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"mermaid-diagram\"") != NULL);
+    ASSERT_TRUE(strstr(res.html, "rx=\"22\"") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
+bool test_parser_mermaid_sequence(void) {
+    const char *md = "```mermaid\nsequenceDiagram\n    participant User\n    participant App\n    User->>App: Request\n```\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<div class=\"mermaid\"") != NULL);
+    ASSERT_TRUE(strstr(res.html, "seq-arrow") != NULL);
+    ASSERT_TRUE(strstr(res.html, "Request") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
+bool test_parser_mermaid_class(void) {
+    const char *md = "```mermaid\nclassDiagram\n    class User {\n        +String name\n    }\n```\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<div class=\"mermaid\"") != NULL);
+    ASSERT_TRUE(strstr(res.html, "+String name") != NULL);
+    md_parse_result_free(&res);
+    return true;
+}
+
+bool test_parser_mermaid_pie(void) {
+    const char *md = "```mermaid\npie title Results\n    \"A\" : 80\n    \"B\" : 20\n```\n";
+    md_parse_result_t res = md_to_html(md, strlen(md));
+    ASSERT_TRUE(res.success);
+    ASSERT_NOT_NULL(res.html);
+    ASSERT_TRUE(strstr(res.html, "<div class=\"mermaid\"") != NULL);
+    ASSERT_TRUE(strstr(res.html, "Results") != NULL);
+    ASSERT_TRUE(strstr(res.html, "80.0%") != NULL);
     md_parse_result_free(&res);
     return true;
 }
@@ -287,6 +326,9 @@ int main(void) {
     RUN_TEST(test_parser_strikethrough);
     RUN_TEST(test_parser_math_equations);
     RUN_TEST(test_parser_mermaid);
+    RUN_TEST(test_parser_mermaid_sequence);
+    RUN_TEST(test_parser_mermaid_class);
+    RUN_TEST(test_parser_mermaid_pie);
     RUN_TEST(test_parser_inline_code);
     RUN_TEST(test_parser_code_block);
     RUN_TEST(test_parser_code_block_with_lang);

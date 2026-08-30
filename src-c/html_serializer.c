@@ -819,6 +819,166 @@ static bool ser_is_list_loose(ser_node_t *list_node) {
     return false;
 }
 
+static void ser_mathml_to_latex(ser_node_t *node, ser_builder_t *out) {
+    if (!node || !out) return;
+    if (node->type == SER_NODE_TEXT) {
+        if (!node->text) return;
+        const char *t = node->text;
+        /* Map Unicode math symbols back to LaTeX commands */
+        if (strcmp(t, "\xCE\xB1") == 0) { ser_builder_append(out, "\\alpha "); return; }
+        if (strcmp(t, "\xCE\xB2") == 0) { ser_builder_append(out, "\\beta "); return; }
+        if (strcmp(t, "\xCE\xB3") == 0) { ser_builder_append(out, "\\gamma "); return; }
+        if (strcmp(t, "\xCE\xB4") == 0) { ser_builder_append(out, "\\delta "); return; }
+        if (strcmp(t, "\xCE\xB5") == 0) { ser_builder_append(out, "\\epsilon "); return; }
+        if (strcmp(t, "\xCE\xB8") == 0) { ser_builder_append(out, "\\theta "); return; }
+        if (strcmp(t, "\xCE\xBB") == 0) { ser_builder_append(out, "\\lambda "); return; }
+        if (strcmp(t, "\xCE\xBC") == 0) { ser_builder_append(out, "\\mu "); return; }
+        if (strcmp(t, "\xCF\x80") == 0) { ser_builder_append(out, "\\pi "); return; }
+        if (strcmp(t, "\xCF\x83") == 0) { ser_builder_append(out, "\\sigma "); return; }
+        if (strcmp(t, "\xCF\x86") == 0) { ser_builder_append(out, "\\phi "); return; }
+        if (strcmp(t, "\xCF\x89") == 0) { ser_builder_append(out, "\\omega "); return; }
+        if (strcmp(t, "\xCE\x93") == 0) { ser_builder_append(out, "\\Gamma "); return; }
+        if (strcmp(t, "\xCE\x94") == 0) { ser_builder_append(out, "\\Delta "); return; }
+        if (strcmp(t, "\xCE\x98") == 0) { ser_builder_append(out, "\\Theta "); return; }
+        if (strcmp(t, "\xCE\x9B") == 0) { ser_builder_append(out, "\\Lambda "); return; }
+        if (strcmp(t, "\xCE\xA0") == 0) { ser_builder_append(out, "\\Pi "); return; }
+        if (strcmp(t, "\xCE\xA3") == 0) { ser_builder_append(out, "\\Sigma "); return; }
+        if (strcmp(t, "\xCE\xA6") == 0) { ser_builder_append(out, "\\Phi "); return; }
+        if (strcmp(t, "\xCE\xA9") == 0) { ser_builder_append(out, "\\Omega "); return; }
+        if (strcmp(t, "\xE2\x88\x9E") == 0) { ser_builder_append(out, "\\infty "); return; }
+
+        if (strcmp(t, "\xE2\x88\x91") == 0) { ser_builder_append(out, "\\sum "); return; }
+        if (strcmp(t, "\xE2\x88\x8F") == 0) { ser_builder_append(out, "\\prod "); return; }
+        if (strcmp(t, "\xE2\x88\xAB") == 0) { ser_builder_append(out, "\\int "); return; }
+        if (strcmp(t, "\xE2\x88\x82") == 0) { ser_builder_append(out, "\\partial "); return; }
+        if (strcmp(t, "\xE2\x88\x87") == 0) { ser_builder_append(out, "\\nabla "); return; }
+        if (strcmp(t, "\xC2\xB1") == 0) { ser_builder_append(out, "\\pm "); return; }
+        if (strcmp(t, "\xE2\x88\x93") == 0) { ser_builder_append(out, "\\mp "); return; }
+        if (strcmp(t, "\xC3\x97") == 0) { ser_builder_append(out, "\\times "); return; }
+        if (strcmp(t, "\xC3\xB7") == 0) { ser_builder_append(out, "\\div "); return; }
+        if (strcmp(t, "\xE2\x8B\x85") == 0) { ser_builder_append(out, "\\cdot "); return; }
+        if (strcmp(t, "\xE2\x89\xA4") == 0) { ser_builder_append(out, "\\leq "); return; }
+        if (strcmp(t, "\xE2\x89\xA5") == 0) { ser_builder_append(out, "\\geq "); return; }
+        if (strcmp(t, "\xE2\x89\xA0") == 0) { ser_builder_append(out, "\\neq "); return; }
+        if (strcmp(t, "\xE2\x89\x88") == 0) { ser_builder_append(out, "\\approx "); return; }
+        if (strcmp(t, "\xE2\x89\xA1") == 0) { ser_builder_append(out, "\\equiv "); return; }
+        if (strcmp(t, "\xE2\x86\x92") == 0) { ser_builder_append(out, "\\rightarrow "); return; }
+        if (strcmp(t, "\xE2\x86\x90") == 0) { ser_builder_append(out, "\\leftarrow "); return; }
+        if (strcmp(t, "\xE2\x87\x92") == 0) { ser_builder_append(out, "\\Rightarrow "); return; }
+        if (strcmp(t, "\xE2\x87\x90") == 0) { ser_builder_append(out, "\\Leftarrow "); return; }
+        if (strcmp(t, "\xE2\x80\xA6") == 0) { ser_builder_append(out, "\\ldots "); return; }
+        if (strcmp(t, "\xE2\x8B\xAF") == 0) { ser_builder_append(out, "\\cdots "); return; }
+
+        ser_builder_append(out, t);
+        return;
+    }
+
+    if (node->type == SER_NODE_ELEMENT && node->tag) {
+        const char *tag = node->tag;
+        if (strcmp(tag, "mfrac") == 0) {
+            ser_node_t *num = node->first_child;
+            ser_node_t *den = num ? num->next_sibling : NULL;
+            ser_builder_append(out, "\\frac{");
+            if (num) ser_mathml_to_latex(num, out);
+            ser_builder_append(out, "}{");
+            if (den) ser_mathml_to_latex(den, out);
+            ser_builder_append(out, "}");
+            return;
+        }
+        if (strcmp(tag, "msqrt") == 0) {
+            ser_builder_append(out, "\\sqrt{");
+            ser_node_t *c = node->first_child;
+            while (c) { ser_mathml_to_latex(c, out); c = c->next_sibling; }
+            ser_builder_append(out, "}");
+            return;
+        }
+        if (strcmp(tag, "mroot") == 0) {
+            ser_node_t *base = node->first_child;
+            ser_node_t *deg = base ? base->next_sibling : NULL;
+            ser_builder_append(out, "\\sqrt[");
+            if (deg) ser_mathml_to_latex(deg, out);
+            ser_builder_append(out, "]{");
+            if (base) ser_mathml_to_latex(base, out);
+            ser_builder_append(out, "}");
+            return;
+        }
+        if (strcmp(tag, "msup") == 0) {
+            ser_node_t *base = node->first_child;
+            ser_node_t *sup = base ? base->next_sibling : NULL;
+            if (base) ser_mathml_to_latex(base, out);
+            ser_builder_append(out, "^");
+            if (sup && sup->type == SER_NODE_ELEMENT && strcmp(sup->tag, "mrow") == 0) {
+                ser_mathml_to_latex(sup, out);
+            } else if (sup) {
+                ser_mathml_to_latex(sup, out);
+            }
+            return;
+        }
+        if (strcmp(tag, "msub") == 0) {
+            ser_node_t *base = node->first_child;
+            ser_node_t *sub = base ? base->next_sibling : NULL;
+            if (base) ser_mathml_to_latex(base, out);
+            ser_builder_append(out, "_");
+            if (sub && sub->type == SER_NODE_ELEMENT && strcmp(sub->tag, "mrow") == 0) {
+                ser_mathml_to_latex(sub, out);
+            } else if (sub) {
+                ser_mathml_to_latex(sub, out);
+            }
+            return;
+        }
+        if (strcmp(tag, "msubsup") == 0) {
+            ser_node_t *base = node->first_child;
+            ser_node_t *sub = base ? base->next_sibling : NULL;
+            ser_node_t *sup = sub ? sub->next_sibling : NULL;
+            if (base) ser_mathml_to_latex(base, out);
+            ser_builder_append(out, "_{");
+            if (sub) ser_mathml_to_latex(sub, out);
+            ser_builder_append(out, "}^{");
+            if (sup) ser_mathml_to_latex(sup, out);
+            ser_builder_append(out, "}");
+            return;
+        }
+        if (strcmp(tag, "mrow") == 0) {
+            ser_builder_append(out, "{");
+            ser_node_t *c = node->first_child;
+            while (c) { ser_mathml_to_latex(c, out); c = c->next_sibling; }
+            ser_builder_append(out, "}");
+            return;
+        }
+        if (strcmp(tag, "mtext") == 0) {
+            ser_node_t *c = node->first_child;
+            if (c && c->type == SER_NODE_TEXT && c->text && c->text[0] == '\\') {
+                ser_builder_append(out, c->text);
+            } else {
+                ser_builder_append(out, "\\text{");
+                while (c) { ser_mathml_to_latex(c, out); c = c->next_sibling; }
+                ser_builder_append(out, "}");
+            }
+            return;
+        }
+        if (strcmp(tag, "mspace") == 0) {
+            ser_builder_append(out, " ");
+            return;
+        }
+        if (strcmp(tag, "mi") == 0) {
+            const char *mv = ser_node_get_attr(node, "mathvariant");
+            if (mv && strcmp(mv, "normal") == 0) {
+                ser_builder_append(out, "\\mathrm{");
+                ser_node_t *c = node->first_child;
+                while (c) { ser_mathml_to_latex(c, out); c = c->next_sibling; }
+                ser_builder_append(out, "}");
+                return;
+            }
+        }
+
+        ser_node_t *c = node->first_child;
+        while (c) {
+            ser_mathml_to_latex(c, out);
+            c = c->next_sibling;
+        }
+    }
+}
+
 static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) {
     if (!node || !out) return;
 
@@ -1480,6 +1640,13 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             return;
         }
         if (cls && strcmp(cls, "mermaid") == 0) {
+            const char *data_mm = ser_node_get_attr(node, "data-mermaid");
+            if (data_mm && data_mm[0] != '\0') {
+                ser_builder_append(out, "```mermaid\n");
+                ser_builder_append(out, data_mm);
+                ser_builder_append(out, "\n```\n\n");
+                return;
+            }
             ser_builder_append(out, "```mermaid\n");
             ser_node_t *child = node->first_child;
             while (child) {
@@ -1491,6 +1658,28 @@ static void ser_walk_node(ser_node_t *node, ser_builder_t *out, ser_ctx_t *ctx) 
             ser_builder_append(out, "\n```\n\n");
             return;
         }
+    }
+
+    /* MathML <math> support */
+    if (strcmp(tag, "math") == 0) {
+        const char *disp = ser_node_get_attr(node, "display");
+        bool is_block = (disp && strcmp(disp, "block") == 0);
+        if (is_block) {
+            ser_builder_append(out, "$$\n");
+        } else {
+            ser_builder_append(out, "$");
+        }
+        ser_node_t *child = node->first_child;
+        while (child) {
+            ser_mathml_to_latex(child, out);
+            child = child->next_sibling;
+        }
+        if (is_block) {
+            ser_builder_append(out, "\n$$\n\n");
+        } else {
+            ser_builder_append(out, "$");
+        }
+        return;
     }
 
     /* Math Inline in <span> */

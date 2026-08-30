@@ -100,62 +100,10 @@ function renderMarkdown() {
 }
 
 /**
- * @brief Renders KaTeX math formulas and Mermaid diagrams in the preview pane.
+ * @brief Post-processing for rendered HTML (image error handling and fallbacks).
  */
 function renderPostProcessing() {
-    /* 1. Render KaTeX Math */
-    if (window.katex) {
-        previewEl.querySelectorAll('.math-inline').forEach((el) => {
-            if (el.dataset.rendered) return;
-            let tex = el.textContent.trim();
-            if (tex.startsWith('$') && tex.endsWith('$') && tex.length >= 2) {
-                tex = tex.substring(1, tex.length - 1).trim();
-            }
-            try {
-                katex.render(tex, el, { throwOnError: false });
-                el.dataset.rendered = 'true';
-            } catch (e) {
-                console.warn('KaTeX inline render error', e);
-            }
-        });
-
-        previewEl.querySelectorAll('.math-block').forEach((el) => {
-            if (el.dataset.rendered) return;
-            let tex = el.textContent.trim();
-            if (tex.startsWith('$$') && tex.endsWith('$$') && tex.length >= 4) {
-                tex = tex.substring(2, tex.length - 2).trim();
-            }
-            try {
-                katex.render(tex, el, { displayMode: true, throwOnError: false });
-                el.dataset.rendered = 'true';
-            } catch (e) {
-                console.warn('KaTeX block render error', e);
-            }
-        });
-    }
-
-    /* 2. Render Mermaid Diagrams */
-    if (window.mermaid) {
-        let hasMermaid = false;
-        previewEl.querySelectorAll('code.language-mermaid').forEach((el) => {
-            const pre = el.parentElement;
-            if (!pre || pre.tagName.toLowerCase() !== 'pre') return;
-            const container = document.createElement('div');
-            container.className = 'mermaid';
-            container.textContent = el.textContent;
-            pre.replaceWith(container);
-            hasMermaid = true;
-        });
-        if (hasMermaid || previewEl.querySelector('.mermaid:not([data-processed="true"])')) {
-            try {
-                mermaid.run({ nodes: previewEl.querySelectorAll('.mermaid:not([data-processed="true"])') });
-            } catch (e) {
-                console.warn('Mermaid render error', e);
-            }
-        }
-    }
-
-    /* 3. Image loading & graceful error handling */
+    /* Image loading & graceful error handling */
     previewEl.querySelectorAll('img').forEach((img) => {
         if (img.dataset.hasErrorHandler) return;
         img.dataset.hasErrorHandler = 'true';
